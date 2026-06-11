@@ -1,0 +1,97 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.OpenFOAM.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      blockMeshDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+convertToMeters 1.0;
+
+// Small one-pulse Connor/Riffel 316L domain for fast AMR studies:
+//   x = width, y = depth/laser-entry direction, z = scan direction.
+//   Base mesh spacing is uniform: 50 um in x, y, and z.
+
+vertices
+(
+    (0       0       0)
+    (1.5e-3 0       0)
+    (1.5e-3 1.0e-3 0)
+    (0       1.0e-3 0)
+    (0       0       3.5e-3)
+    (1.5e-3 0       3.5e-3)
+    (1.5e-3 1.0e-3 3.5e-3)
+    (0       1.0e-3 3.5e-3)
+);
+
+blocks
+(
+    hex (0 1 2 3 4 5 6 7) (30 20 70) simpleGrading (1 1 1)
+);
+
+edges
+(
+);
+
+boundary
+(
+    lowerWall
+    {
+        type wall;
+        faces
+        (
+            (3 7 6 2)
+        );
+    }
+
+    atmosphere
+    {
+        type patch;
+        faces
+        (
+            (1 5 4 0)
+        );
+    }
+
+    rightWall
+    {
+        type patch;
+        faces
+        (
+            (1 2 6 5)
+        );
+    }
+
+    leftWall
+    {
+        type patch;
+        faces
+        (
+            (0 4 7 3)
+        );
+    }
+
+    frontAndBack
+    {
+        type patch;
+        faces
+        (
+            (0 3 2 1)
+            (5 6 7 4)
+        );
+    }
+);
+
+mergePatchPairs
+(
+);
+
+// ************************************************************************* //

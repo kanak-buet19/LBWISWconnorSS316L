@@ -1,0 +1,10 @@
+#!/bin/bash
+
+set -e
+
+caseDir="$(cd "$(dirname "$0")" && pwd)"
+cd "$caseDir"
+
+rm -rf smoke_runs smoke_plots smoke_summary.csv
+rm -f planned_cases.json best_case_summary.json
+rm -f keyhole_*.out keyhole_*.err

@@ -1,0 +1,11 @@
+#!/bin/bash
+
+set -e
+
+caseDir="$(cd "$(dirname "$0")" && pwd)"
+cd "$caseDir"
+
+pythonExe="${PYTHON:-/home/x-rkanak1/.conda/envs/isw_env/bin/python3}"
+export MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp}"
+
+exec "$pythonExe" calibrate_meltpool.py --run "$@"

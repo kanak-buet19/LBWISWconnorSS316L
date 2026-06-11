@@ -1,0 +1,40 @@
+#!/bin/bash
+
+set -Eeo pipefail
+
+caseDir="$(cd "$(dirname "$0")" && pwd)"
+cd "$caseDir"
+
+if [ -z "${WM_PROJECT_DIR:-}" ]; then
+    echo "ERROR: OpenFOAM environment is not sourced." >&2
+    echo "Source OpenFOAM first, then run ./Allrun again." >&2
+    exit 1
+fi
+
+export PYTHON="${PYTHON:-python3}"
+export MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp}"
+export RANKS_PER_CASE="${RANKS_PER_CASE:-2}"
+export MAX_PARALLEL_CASES="${MAX_PARALLEL_CASES:-2}"
+
+echo "=== Keyhole validation smoke pipeline ==="
+echo "Config: config_smoke.json"
+echo "Mesh: 40 um base, static, no AMR"
+echo "Workflow: sensitivity exploration, adaptive proposals, scoring, dashboard"
+echo "Cases: 6 sensitivity + 2 optimization cases per iteration"
+echo "Ranks per case: $RANKS_PER_CASE"
+echo "Parallel cases: $MAX_PARALLEL_CASES"
+echo "Python: $PYTHON"
+echo "========================================="
+
+"$PYTHON" scripts/keyhole_search.py \
+    --config config_smoke.json \
+    --mode all \
+    --run \
+    --force \
+    --jobs "$MAX_PARALLEL_CASES" \
+    --ranks-per-case "$RANKS_PER_CASE"
+
+echo
+echo "Smoke pipeline complete."
+echo "Summary: smoke_summary.csv"
+echo "Dashboard: smoke_plots/live_progress_dashboard.png"

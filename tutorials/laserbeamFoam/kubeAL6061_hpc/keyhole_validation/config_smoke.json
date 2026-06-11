@@ -1,0 +1,112 @@
+{
+  "description": "Coarse smoke-test config for verifying the adaptive keyhole validation workflow end-to-end.",
+  "template_case": "reference_template",
+  "runs_dir": "smoke_runs",
+  "plots_dir": "smoke_plots",
+  "summary_csv": "smoke_summary.csv",
+  "exp_aspect_ratio_csv": "../kube_exp_data/csv/1ms_meltpool_ar_exp.csv",
+  "paper_simulation_setup": {
+    "laser_power_W": 350.0,
+    "laser_on_time_s": 0.0008,
+    "simulation_end_s": 0.0013,
+    "laser_radius_um": 40.0,
+    "laser_spot_diameter_um": 80.0,
+    "stationary_laser": true,
+    "note": "Smoke test uses paper-style timing but 40 um static mesh."
+  },
+  "mesh": {
+    "base_mesh_um": 40.0,
+    "dynamic_mesh": false,
+    "max_refinement": 0,
+    "effective_min_cell_um": 40.0,
+    "max_cells": 300000
+  },
+  "parallel": {
+    "ranks_per_case": 2,
+    "max_parallel_cases": 2
+  },
+  "write_interval_s": 1.0e-4,
+  "parameter_bounds": {
+    "laser_power_W": [340.0, 360.0],
+    "laser_radius_um": [38.0, 43.0],
+    "e_num_density": [1.0e29, 5.0e29],
+    "elec_resistivity_ohm_m": [3.0e-7, 1.0e-6]
+  },
+  "exploration_cases": [
+    {"name": "smoke_center", "laser_power_W": 350.0, "laser_radius_um": 40.5, "e_num_density": 3.0e29, "elec_resistivity_ohm_m": 6.5e-7},
+    {"name": "smoke_low_res", "laser_power_W": 350.0, "laser_radius_um": 40.5, "e_num_density": 3.0e29, "elec_resistivity_ohm_m": 3.0e-7},
+    {"name": "smoke_high_power", "laser_power_W": 360.0, "laser_radius_um": 40.5, "e_num_density": 3.0e29, "elec_resistivity_ohm_m": 6.5e-7},
+    {"name": "smoke_large_radius", "laser_power_W": 350.0, "laser_radius_um": 43.0, "e_num_density": 3.0e29, "elec_resistivity_ohm_m": 6.5e-7},
+    {"name": "smoke_low_power_small_radius", "laser_power_W": 340.0, "laser_radius_um": 38.0, "e_num_density": 3.0e29, "elec_resistivity_ohm_m": 6.5e-7},
+    {"name": "smoke_high_ne_high_res", "laser_power_W": 350.0, "laser_radius_um": 40.5, "e_num_density": 5.0e29, "elec_resistivity_ohm_m": 1.0e-6}
+  ],
+  "target_stability": {
+    "objective": "aspect_ratio_trace",
+    "meltpool_width_um": [366.0, 436.0],
+    "meltpool_depth_um": [370.0, 460.0],
+    "dimension_gate": {
+      "enabled": true,
+      "reasonable_width_um": [250.0, 600.0],
+      "reasonable_depth_um": [200.0, 650.0],
+      "hard_width_um": 700.0,
+      "hard_depth_um": 700.0,
+      "hard_keyhole_depth_um": 600.0,
+      "ignore_ar_after_keyhole_clip": true
+    },
+    "save_width_depth_target_snapshots": true,
+    "max_target_snapshot_pngs_per_case": 20,
+    "min_stable_duration_ms": 0.8,
+    "comparison_window_ms": 1.0,
+    "min_comparison_window_coverage": 0.95,
+    "require_comparison_window_for_success": true,
+    "aspect_ratio_rmse_target": 0.15,
+    "aspect_ratio_bias_target": 0.10,
+    "aspect_ratio_slope_target_per_ms": 0.12,
+    "sample_time_tolerance_ms": 0.15,
+    "aspect_ratio_definition": "depth_over_width"
+  },
+  "early_stop": {
+    "enabled": true,
+    "too_hot": {
+      "min_time_ms": 0.35,
+      "meltpool_depth_um": 700.0,
+      "keyhole_depth_um": 700.0
+    },
+    "too_cold": {
+      "check_time_ms": 1.0,
+      "meltpool_width_um": 80.0,
+      "meltpool_depth_um": 80.0
+    },
+    "success": {
+      "stop_after_stable_duration_ms": 0.8
+    }
+  },
+  "optimization": {
+    "strategy": "ensemble_surrogate",
+    "enabled_after_sensitivity": true,
+    "cases_per_iteration": 2,
+    "max_iterations": 2,
+    "random_seed": 17,
+    "local_search_fraction": 0.25,
+    "candidate_pool_size": 1000,
+    "surrogate_min_cases": 4,
+    "surrogate_n_estimators": 64,
+    "exploration_weight": 0.20,
+    "feasibility_weight": 2.00,
+    "diversity_fraction": 0.10,
+    "stop_when_stable_case_found": true
+  },
+  "scoring_weights": {
+    "stable_window": 100.0,
+    "width_error": 0.15,
+    "depth_error": 0.15,
+    "aspect_ratio_error": 100.0,
+    "aspect_ratio_bias": 25.0,
+    "aspect_ratio_slope": 25.0,
+    "comparison_window": 100.0,
+    "dimension_gate": 125.0,
+    "hard_runaway": 500.0,
+    "keyhole_missing": 25.0,
+    "missing_csv_penalty": 1000000.0
+  }
+}

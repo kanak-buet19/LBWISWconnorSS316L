@@ -1,0 +1,37 @@
+{
+  "template": "template",
+  "runs_dir": "runs",
+  "stats_dir": "stats",
+  "domain_um": {
+    "x": 1800,
+    "y": 1100,
+    "z": 800
+  },
+  "max_refinement": 1,
+  "cases": [
+    {
+      "name": "mesh_8um_fine_16um_base",
+      "base_cell_um": 16,
+      "cells": [112, 69, 50],
+      "mesh_refinement": 1,
+      "cores": 16,
+      "run_sim": true
+    },
+    {
+      "name": "mesh_6um_fine_24um_base",
+      "base_cell_um": 6,
+      "cells": [75, 46, 33],
+      "mesh_refinement": 2,
+      "cores": 28,
+      "run_sim": true
+    },
+    {
+      "name": "mesh_5um_fine_20um_base",
+      "base_cell_um": 5,
+      "cells": [90, 55, 40],
+      "mesh_refinement": 2,
+      "cores": 40,
+      "run_sim": true
+    }
+  ]
+}

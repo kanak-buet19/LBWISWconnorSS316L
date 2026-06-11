@@ -1,0 +1,65 @@
+{
+  "label": "sensitivity",
+  "cases": [
+    {
+      "case_id": "sensitivity_i00_smoke_center_p350.00_r40.50_ne03.00e29_er00.650e-6",
+      "name": "smoke_center",
+      "stage": "sensitivity",
+      "iteration": 0,
+      "laser_power_W": 350.0,
+      "laser_radius_um": 40.5,
+      "e_num_density": 3e+29,
+      "elec_resistivity_ohm_m": 6.5e-07
+    },
+    {
+      "case_id": "sensitivity_i00_smoke_low_res_p350.00_r40.50_ne03.00e29_er00.300e-6",
+      "name": "smoke_low_res",
+      "stage": "sensitivity",
+      "iteration": 0,
+      "laser_power_W": 350.0,
+      "laser_radius_um": 40.5,
+      "e_num_density": 3e+29,
+      "elec_resistivity_ohm_m": 3e-07
+    },
+    {
+      "case_id": "sensitivity_i00_smoke_high_power_p360.00_r40.50_ne03.00e29_er00.650e-6",
+      "name": "smoke_high_power",
+      "stage": "sensitivity",
+      "iteration": 0,
+      "laser_power_W": 360.0,
+      "laser_radius_um": 40.5,
+      "e_num_density": 3e+29,
+      "elec_resistivity_ohm_m": 6.5e-07
+    },
+    {
+      "case_id": "sensitivity_i00_smoke_large_radius_p350.00_r43.00_ne03.00e29_er00.650e-6",
+      "name": "smoke_large_radius",
+      "stage": "sensitivity",
+      "iteration": 0,
+      "laser_power_W": 350.0,
+      "laser_radius_um": 43.0,
+      "e_num_density": 3e+29,
+      "elec_resistivity_ohm_m": 6.5e-07
+    },
+    {
+      "case_id": "sensitivity_i00_smoke_low_power_small_radius_p340.00_r38.00_ne03.00e29_er00.650e-6",
+      "name": "smoke_low_power_small_radius",
+      "stage": "sensitivity",
+      "iteration": 0,
+      "laser_power_W": 340.0,
+      "laser_radius_um": 38.0,
+      "e_num_density": 3e+29,
+      "elec_resistivity_ohm_m": 6.5e-07
+    },
+    {
+      "case_id": "sensitivity_i00_smoke_high_ne_high_res_p350.00_r40.50_ne05.00e29_er01.000e-6",
+      "name": "smoke_high_ne_high_res",
+      "stage": "sensitivity",
+      "iteration": 0,
+      "laser_power_W": 350.0,
+      "laser_radius_um": 40.5,
+      "e_num_density": 5e+29,
+      "elec_resistivity_ohm_m": 1e-06
+    }
+  ]
+}

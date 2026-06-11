@@ -1,0 +1,112 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      transportProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Interface tracking method: isoAdvector or MULES
+interfaceTrackingScheme MULES;
+
+refineTrack     false;
+refineMeltPool  true;
+
+phases          (metal gas);
+
+metal
+{
+    transportModel  Newtonian;     // Viscosity model for the metal phase
+    nu              3.7e-7;        // Kinematic viscosity [m2/s]
+
+    rho             2700;          // Density [kg/m3]
+
+    Tsolidus 873;                  // Solidus temperature [K]
+    Tliquidus 915;                 // Liquidus temperature [K]
+    LatentHeat 380e3;              // Latent heat of fusion [J/kg]
+    beta    2.32e-5;               // Thermal expansion coefficient [1/K]
+
+    table_kappa                    // Metal thermal conductivity table: (T [K], kappa [W/m/K])
+    (
+        (300.00   190.00)
+        (500.00   200.00)
+        (700.00   195.00)
+        (850.00   180.00)
+        (915.00   88.00)
+        (1000.00  90.00)
+        (1200.00  95.00)
+        (1600.00  100.00)
+        (2000.00  105.00)
+        (2454.17  110.00)
+        (2792.00  115.00)
+        (3200.00  125.00)
+        (4000.00  140.00)
+        (5000.00  155.00)
+    );
+
+    table_cp                       // Metal specific heat table: (T [K], cp [J/kg/K])
+    (
+        (300.00   900.00)
+        (700.00   1000.00)
+        (915.00   1170.00)
+        (1200.00  1170.00)
+        (3000.00  1250.00)
+        (5000.00  1400.00)
+    );
+
+    elec_resistivity	6.1e-7;     // Constant fallback 6e-7//finer mesh 
+
+    // table_resistivity
+    // (
+    //     (300.00   3.5e-7)   // Solid room temp (High 16% absorption - initiates perfectly)
+    //     (2000.00  3.5e-7)   // Liquid range
+    //     (2792.00  6e-7)   // Evaporative peak (Strictly kept in 3.5e-7 range)
+    //     (5000.00  6e-7)   // Capped above boiling point
+    // );
+}
+
+gas
+{
+    transportModel  Newtonian;     // Viscosity model for the gas phase
+
+    nu              1.48e-05;      // Kinematic viscosity [m2/s]
+
+    rho             1;             // Density [kg/m3]
+
+    poly_kappa   (0.04 0 0 0 0 0 0 0);       // Gas thermal conductivity polynomial [W/m/K]
+    poly_cp   (520 0.0 0 0 0 0 0 0);         // Gas specific heat polynomial [J/kg/K]
+
+    Tsolidus    1.0;              // Dummy gas solidus temperature [K]
+    Tliquidus   10.0;             // Dummy gas liquidus temperature [K]
+    LatentHeat  1;                // Dummy gas latent heat [J/kg]
+    beta    4.0e-5;               // Gas thermal expansion coefficient [1/K]
+}
+
+emS                         0.15;       // Solid emissivity [-]
+emL                         0.15;       // Liquid emissivity [-]
+TRef                        300;        // Radiation reference/background temperature [K]
+T_ambient                   300;        // Ambient temperature for convection [K]
+h_convection                0.1;        // Convective heat transfer coefficient [W/m2/K]
+
+sigma            0.91;           // Surface tension [N/m]
+Marangoni_Constant	-3.5e-4;    // d(sigma)/dT for Marangoni force [N/m/K]
+p0	101325.0;                    // Atmospheric pressure reference [Pa]
+p_amb   101325.0;                // Ambient chamber pressure used to choose Tvap [Pa]
+beta_r  0.18;                    // Recoil pressure accommodation coefficient [-]
+Tvap	2792;                    // Vaporization temperature at p_amb [K]
+Tvap_atm    2792;                // Vaporization temperature at p0 [K]
+recoilPressureModel condensation; // condensation or modifiedReducedPressure
+recoilTransitionWidth       30; // Smooth recoil activation width above Tvap [K]
+Mm	0.027;                       // Molar mass [kg/mol]
+LatentHeatVap 1.053e7;           // Latent heat of vaporization [J/kg]
+
+
+// ************************************************************************* //

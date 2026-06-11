@@ -1,0 +1,41 @@
+#!/bin/bash
+
+set -Eeo pipefail
+
+caseDir="$(cd "$(dirname "$0")" && pwd)"
+cd "$caseDir"
+
+export PYTHON="${PYTHON:-python3}"
+export MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp}"
+
+CONFIG="${CONFIG:-meltpool_calibration/calibration_config.json}"
+case "$CONFIG" in
+    /*) ;;
+    *) CONFIG="$caseDir/$CONFIG" ;;
+esac
+JOBS="${JOBS:-4}"
+RANKS_PER_CASE="${RANKS_PER_CASE:-2}"
+FORCE="${FORCE:-0}"
+RUN_COMMAND="CALIBRATION_CONFIG='$CONFIG' bash '$caseDir/meltpool_calibration/run_single_case_local.sh'"
+
+echo "=== Local Kube calibration sweep ==="
+echo "Case directory: $caseDir"
+echo "Config: $CONFIG"
+echo "Parallel cases: $JOBS"
+echo "MPI ranks per case: $RANKS_PER_CASE"
+echo "Total intended ranks: $((JOBS * RANKS_PER_CASE))"
+echo "Force rebuild cases: $FORCE"
+echo "Python: $PYTHON"
+echo "===================================="
+
+forceArgs=()
+if [ "$FORCE" = "1" ]; then
+    forceArgs=(--force)
+fi
+
+"$PYTHON" meltpool_calibration/kube_sweep.py \
+    --config "$CONFIG" \
+    --jobs "$JOBS" \
+    --ranks-per-case "$RANKS_PER_CASE" \
+    "${forceArgs[@]}" \
+    --run-command "$RUN_COMMAND"

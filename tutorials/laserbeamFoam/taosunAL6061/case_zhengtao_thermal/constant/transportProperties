@@ -1,0 +1,149 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      transportProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Interface tracking method: isoAdvector or MULES
+interfaceTrackingScheme MULES;
+
+phases          (metal gas);
+
+metal
+{
+    transportModel  Newtonian;     // Viscosity model for the metal phase
+    nu              3.7e-7;        // Kinematic viscosity [m2/s]
+
+    rho             2415;          // Density [kg/m3]
+
+    Tsolidus 873;                  // Solidus temperature [K]
+    Tliquidus 915;                 // Liquidus temperature [K]
+    LatentHeat 380e3;              // Latent heat of fusion [J/kg]
+    beta    2.32e-5;               // Thermal expansion coefficient [1/K]
+
+    // Original metal thermal conductivity table: (T [K], kappa [W/m/K])
+    // table_kappa
+    // (
+    //     (300.00   209.36)
+    //     (495.83   192.91)
+    //     (691.67   177.65)
+    //     (887.50   163.55)
+    //     (1083.33  150.55)
+    //     (1279.17  138.61)
+    //     (1475.00  127.68)
+    //     (1670.83  117.71)
+    //     (1866.67  108.66)
+    //     (2062.50  100.48)
+    //     (2258.33  93.12)
+    //     (2454.17  86.53)
+    //     (2650.00  80.67)
+    //     (2845.83  75.48)
+    //     (3041.67  70.93)
+    //     (3237.50  66.96)
+    //     (3433.33  63.53)
+    //     (3629.17  60.59)
+    //     (3825.00  58.10)
+    //     (4020.83  55.99)
+    //     (4216.67  54.24)
+    //     (4412.50  52.78)
+    //     (4608.33  51.58)
+    //     (4804.17  50.59)
+    //     (5000.00  49.75)
+    // );
+
+    table_kappa                    // Zhengtao AL6061 thermal conductivity table: (T [K], kappa [W/m/K])
+    (
+        (300      179.8)
+        (914.999  235.765)
+        (915      90)
+        (5000     90)
+    );
+
+    // Original metal specific heat table: (T [K], cp [J/kg/K])
+    // table_cp
+    // (
+    //     (300.00   836.15)
+    //     (495.83   873.17)
+    //     (691.67   907.97)
+    //     (887.50   940.63)
+    //     (1083.33  971.21)
+    //     (1279.17  999.77)
+    //     (1475.00  1026.38)
+    //     (1670.83  1051.11)
+    //     (1866.67  1074.01)
+    //     (2062.50  1095.16)
+    //     (2258.33  1114.62)
+    //     (2454.17  1132.46)
+    //     (2650.00  1148.74)
+    //     (2845.83  1163.52)
+    //     (3041.67  1176.88)
+    //     (3237.50  1188.87)
+    //     (3433.33  1199.56)
+    //     (3629.17  1209.02)
+    //     (3825.00  1217.32)
+    //     (4020.83  1224.51)
+    //     (4216.67  1230.67)
+    //     (4412.50  1235.86)
+    //     (4608.33  1240.14)
+    //     (4804.17  1243.58)
+    //     (5000.00  1246.25)
+    // );
+
+    table_cp                       // Zhengtao AL6061 specific heat table: (T [K], cp [J/kg/K])
+    (
+        (300      870.8)
+        (914.999  1169.999514)
+        (915      1170)
+        (5000     1170)
+    );
+
+    elec_resistivity	6.6e-7;     // old:6.2 YES 6 NO
+}
+
+gas
+{
+    transportModel  Newtonian;     // Viscosity model for the gas phase
+
+    nu              1.48e-05;      // Kinematic viscosity [m2/s]
+
+    rho             1;             // Density [kg/m3]
+
+    poly_kappa   (0.04 0 0 0 0 0 0 0);       // Gas thermal conductivity polynomial [W/m/K]
+    poly_cp   (520 0.0 0 0 0 0 0 0);         // Gas specific heat polynomial [J/kg/K]
+
+    Tsolidus    1.0;              // Dummy gas solidus temperature [K]
+    Tliquidus   10.0;             // Dummy gas liquidus temperature [K]
+    LatentHeat  1;                // Dummy gas latent heat [J/kg]
+    beta    4.0e-5;               // Gas thermal expansion coefficient [1/K]
+}
+
+emS                         0.15;       // Solid emissivity [-]
+emL                         0.15;       // Liquid emissivity [-]
+TRef                        300;        // Radiation reference/background temperature [K]
+T_ambient                   300;        // Ambient temperature for convection [K]
+h_convection                10;        // Convective heat transfer coefficient [W/m2/K]
+
+sigma            0.91;           // Surface tension [N/m]
+Marangoni_Constant	-3.5e-4;    // d(sigma)/dT for Marangoni force [N/m/K]
+p0	101325.0;                    // Atmospheric pressure reference [Pa]
+p_amb   101325.0;                // Ambient chamber pressure used to choose Tvap [Pa]
+beta_r  0.08;                    // Recoil pressure accommodation coefficient [-]
+Tvap	2792;                    // Vaporization temperature at p_amb [K]
+Tvap_atm    2792;                // Vaporization temperature at p0 [K]
+recoilPressureModel condensation; // condensation or modifiedReducedPressure
+recoilTransitionWidth       100; // Smooth recoil activation width above Tvap [K]
+Mm	0.027;                       // Molar mass [kg/mol]
+LatentHeatVap 1.053e7;           // Latent heat of vaporization [J/kg]
+
+
+// ************************************************************************* //

@@ -1,0 +1,14 @@
+#!/bin/bash
+# -----------------------------------------------------------------------------
+# Allclean script for LPBF Sensitivity Study
+# -----------------------------------------------------------------------------
+
+echo "Cleaning LPBF Sensitivity Study directories..."
+
+# Safely delete intermediate folders
+rm -rf runs/
+rm -rf logs/
+rm -rf plots/
+rm -rf results/
+
+echo "Clean complete!"

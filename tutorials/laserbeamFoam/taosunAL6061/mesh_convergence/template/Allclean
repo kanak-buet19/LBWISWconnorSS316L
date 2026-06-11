@@ -1,0 +1,14 @@
+#!/bin/bash
+
+caseDir="$(cd "$(dirname "$0")" && pwd)"
+cd "$caseDir"
+
+. "$WM_PROJECT_DIR/bin/tools/CleanFunctions"
+
+cleanCase
+
+rm -rf 0 VTK VTKs postProcessing post-processing-data
+rm -rf processor*
+rm -rf absorptivity_vs_time
+rm -f output_*.out output_*.err
+rm -f taosunAL6061.foam

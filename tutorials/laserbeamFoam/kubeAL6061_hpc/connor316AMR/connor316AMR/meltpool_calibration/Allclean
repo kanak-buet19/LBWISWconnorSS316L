@@ -1,0 +1,13 @@
+#!/bin/bash
+
+set -e
+
+caseDir="$(cd "$(dirname "$0")" && pwd)"
+cd "$caseDir"
+
+rm -rf runs
+rm -rf plots
+rm -rf __pycache__
+rm -f summary.csv best_case.txt
+rm -f fine_calibration_*.out fine_calibration_*.err
+rm -f output_*.out output_*.err slurm-*.out

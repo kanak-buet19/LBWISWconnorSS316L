@@ -1,0 +1,18 @@
+#!/bin/bash
+
+caseDir="$(cd "$(dirname "$0")" && pwd)"
+cd "$caseDir"
+
+. "$WM_PROJECT_DIR/bin/tools/CleanFunctions"
+
+cleanCase
+
+rm -rf 0 VTK VTKs postProcessing post-processing-data
+rm -rf processor*
+rm -rf absorptivity_vs_time
+rm -rf meltpool_calibration/runs meltpool_calibration/plots
+rm -f meltpool_calibration/summary.csv
+rm -f meltpool_calibration/next_proposal.json
+rm -f meltpool_calibration/adaptive_state.json
+rm -f output_*.out output_*.err calibrate_*.out calibrate_*.err
+rm -f kubeAL6061.foam cunninghamValidation.foam

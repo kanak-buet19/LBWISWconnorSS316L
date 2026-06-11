@@ -1,0 +1,46 @@
+{
+  "calibration_objective": "match_keyhole_start_time_only",
+  "target_keyhole_start_ms": 1.6109,
+  "keyhole_start_tolerance_ms": 0.05,
+  "keyhole_onset_threshold_um": 80.0,
+  "laser_radius_um": 41,
+  "elec_resistivity_ohm_m": 3.3e-7,
+  "mesh_size_um": 20,
+  "exploration_cases": [
+    {"laser_radius_um": 39.0, "elec_resistivity_ohm_m": 3.0e-7},
+    {"laser_radius_um": 39.0, "elec_resistivity_ohm_m": 4.0e-7},
+    {"laser_radius_um": 40.0, "elec_resistivity_ohm_m": 3.3e-7},
+    {"laser_radius_um": 40.5, "elec_resistivity_ohm_m": 3.7e-7},
+    {"laser_radius_um": 41.0, "elec_resistivity_ohm_m": 3.0e-7},
+    {"laser_radius_um": 41.0, "elec_resistivity_ohm_m": 3.3e-7},
+    {"laser_radius_um": 42.0, "elec_resistivity_ohm_m": 3.6e-7},
+    {"laser_radius_um": 42.0, "elec_resistivity_ohm_m": 4.0e-7}
+  ],
+  "surrogate_proposal": {
+    "laser_radius_min_um": 39.0,
+    "laser_radius_max_um": 42.0,
+    "elec_resistivity_min_ohm_m": 3.0e-7,
+    "elec_resistivity_max_ohm_m": 4.0e-7,
+    "radius_grid_count": 61,
+    "elec_resistivity_grid_count": 61,
+    "adaptive_radius_step_um": 0.25,
+    "adaptive_elec_resistivity_step_ohm_m": 1e-8
+  },
+  "adaptive": {
+    "enabled": true,
+    "batch_size": 8,
+    "max_iterations": 40,
+    "stop_on_match": true
+  },
+  "dynamic_mesh": true,
+  "max_refinement": 1,
+  "max_cells": 1000000,
+  "max_parallel_cases": 8,
+  "ranks_per_case": 8,
+  "exp_time_shift_ms": 0.0,
+  "sim_time_shift_ms": 2.66,
+  "keyhole_ar_uses_case_beam_diameter": true,
+  "plot_from_keyhole_onset": false,
+  "simulation_end_s": 0.00447081,
+  "write_interval_s": 2e-5
+}

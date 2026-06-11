@@ -1,0 +1,98 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.OpenFOAM.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      blockMeshDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+convertToMeters 1.0;
+
+// Tao Sun / Zhang 2025 Al6061 moving-laser validation domain:
+//   x = width, y = depth/laser-entry direction, z = sample thickness direction.
+//   The scan direction is 1800 um. Gas depth is 300 um and metal depth is
+//   800 um along y. AMR level 1 gives a finest local spacing of about 20 um.
+
+vertices
+(
+    (0       0        0)
+    (2.5e-3 0        0)
+    (2.5e-3 1.1e-3 0)
+    (0       1.1e-3 0)
+    (0       0        1.5e-3)
+    (2.5e-3 0        1.5e-3)
+    (2.5e-3 1.1e-3 1.5e-3)
+    (0       1.1e-3 1.5e-3)
+);
+
+blocks
+(
+    hex (0 1 2 3 4 5 6 7) (125 55 75) simpleGrading (1 1 1)
+);
+
+edges
+(
+);
+
+boundary
+(
+    lowerWall
+    {
+        type wall;
+        faces
+        (
+            (3 7 6 2)
+        );
+    }
+
+    atmosphere
+    {
+        type patch;
+        faces
+        (
+            (1 5 4 0)
+        );
+    }
+
+    rightWall
+    {
+        type patch;
+        faces
+        (
+            (1 2 6 5)
+        );
+    }
+
+    leftWall
+    {
+        type patch;
+        faces
+        (
+            (0 4 7 3)
+        );
+    }
+
+    frontAndBack
+    {
+        type patch;
+        faces
+        (
+            (0 3 2 1)
+            (5 6 7 4)
+        );
+    }
+);
+
+mergePatchPairs
+(
+);
+
+// ************************************************************************* //

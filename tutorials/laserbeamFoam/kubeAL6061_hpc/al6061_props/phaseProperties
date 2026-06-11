@@ -1,0 +1,39 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  10
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+
+FoamFile
+{
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      phaseProperties;
+}
+
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+phases          (metal gas);
+
+sigma           0.91; // 0.91 original
+
+dsigmadT        -3.5e-4; //-0.5e-4
+
+p0              101325.0;
+p_amb           101325.0;
+
+beta_r          0.18 ; 
+
+
+Tvap            2792;       
+Tvap_atm        2792; 
+
+Mm              0.027;
+
+LatentHeatVap   1.053e7;
+
+
+// ************************************************************************* //

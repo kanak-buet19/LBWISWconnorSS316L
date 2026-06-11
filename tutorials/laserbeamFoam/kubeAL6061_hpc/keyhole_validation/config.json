@@ -1,0 +1,118 @@
+{
+  "description": "Keyhole validation and process-parameter calibration for the Kube Al6061 stable-window experiment.",
+  "template_case": "reference_template",
+  "runs_dir": "runs",
+  "plots_dir": "plots",
+  "summary_csv": "summary.csv",
+  "exp_aspect_ratio_csv": "../kube_exp_data/csv/1ms_meltpool_ar_exp.csv",
+  "paper_simulation_setup": {
+    "laser_power_W": 350.0,
+    "laser_on_time_s": 0.003,
+    "simulation_end_s": 0.003,
+    "laser_radius_um": 40.0,
+    "laser_spot_diameter_um": 80.0,
+    "stationary_laser": true,
+    "note": "Paper Flow-3D setup used 0.8 ms laser-on and 1.3 ms duration. This calibration run is longer because the experiment CSV is a stable-window segment, not startup data."
+  },
+  "mesh": {
+    "base_mesh_um": 20.0,
+    "dynamic_mesh": true,
+    "max_refinement": 1,
+    "effective_min_cell_um": 10.0,
+    "max_cells": 2000000
+  },
+  "parallel": {
+    "ranks_per_case": 8,
+    "max_parallel_cases": 8
+  },
+  "write_interval_s": 2.5e-5,
+  "parameter_bounds": {
+    "laser_power_W": [340.0, 355.0],
+    "laser_radius_um": [40.5, 43.0],
+    "e_num_density": [1.0e29, 4.0e29],
+    "elec_resistivity_ohm_m": [3.0e-7, 6.5e-7]
+  },
+  "exploration_cases": [
+    {"name": "cold_anchor_low_res", "laser_power_W": 350.0, "laser_radius_um": 40.5, "e_num_density": 3.0e29, "elec_resistivity_ohm_m": 3.0e-7},
+    {"name": "low_density_anchor", "laser_power_W": 350.0, "laser_radius_um": 40.5, "e_num_density": 1.0e29, "elec_resistivity_ohm_m": 6.5e-7},
+    {"name": "large_radius_anchor", "laser_power_W": 350.0, "laser_radius_um": 43.0, "e_num_density": 3.0e29, "elec_resistivity_ohm_m": 6.5e-7},
+    {"name": "lower_power_large_radius", "laser_power_W": 340.0, "laser_radius_um": 43.0, "e_num_density": 3.0e29, "elec_resistivity_ohm_m": 5.5e-7},
+    {"name": "mid_low_density", "laser_power_W": 345.0, "laser_radius_um": 41.5, "e_num_density": 1.5e29, "elec_resistivity_ohm_m": 6.0e-7},
+    {"name": "mid_low_resistivity", "laser_power_W": 350.0, "laser_radius_um": 42.0, "e_num_density": 2.0e29, "elec_resistivity_ohm_m": 4.5e-7},
+    {"name": "balanced_soft", "laser_power_W": 345.0, "laser_radius_um": 42.5, "e_num_density": 2.5e29, "elec_resistivity_ohm_m": 5.0e-7},
+    {"name": "balanced_warm", "laser_power_W": 350.0, "laser_radius_um": 42.5, "e_num_density": 2.0e29, "elec_resistivity_ohm_m": 5.5e-7},
+    {"name": "low_power_mid_density", "laser_power_W": 340.0, "laser_radius_um": 41.5, "e_num_density": 2.5e29, "elec_resistivity_ohm_m": 6.0e-7},
+    {"name": "radius43_density2", "laser_power_W": 350.0, "laser_radius_um": 43.0, "e_num_density": 2.0e29, "elec_resistivity_ohm_m": 6.0e-7},
+    {"name": "known_anchor_gentler", "laser_power_W": 350.0, "laser_radius_um": 42.0, "e_num_density": 4.0e29, "elec_resistivity_ohm_m": 3.3e-7},
+    {"name": "warm_guardrail", "laser_power_W": 355.0, "laser_radius_um": 43.0, "e_num_density": 2.0e29, "elec_resistivity_ohm_m": 5.5e-7}
+  ],
+  "target_stability": {
+    "objective": "aspect_ratio_trace",
+    "meltpool_width_um": [366.0, 436.0],
+    "meltpool_depth_um": [370.0, 460.0],
+    "dimension_gate": {
+      "enabled": true,
+      "reasonable_width_um": [250.0, 600.0],
+      "reasonable_depth_um": [200.0, 650.0],
+      "hard_width_um": 700.0,
+      "hard_depth_um": 700.0,
+      "hard_keyhole_depth_um": 600.0,
+      "ignore_ar_after_keyhole_clip": true
+    },
+    "save_width_depth_target_snapshots": true,
+    "max_target_snapshot_pngs_per_case": 60,
+    "min_stable_duration_ms": 1.5,
+    "comparison_window_ms": 2.0,
+    "min_comparison_window_coverage": 0.95,
+    "require_comparison_window_for_success": true,
+    "aspect_ratio_rmse_target": 0.15,
+    "aspect_ratio_bias_target": 0.10,
+    "aspect_ratio_slope_target_per_ms": 0.12,
+    "sample_time_tolerance_ms": 0.075,
+    "aspect_ratio_definition": "depth_over_width"
+  },
+  "early_stop": {
+    "enabled": true,
+    "too_hot": {
+      "min_time_ms": 0.25,
+      "meltpool_depth_um": 520.0,
+      "keyhole_depth_um": 500.0
+    },
+    "too_cold": {
+      "check_time_ms": 1.5,
+      "meltpool_width_um": 230.0,
+      "meltpool_depth_um": 230.0
+    },
+    "success": {
+      "stop_after_stable_duration_ms": 1.5
+    }
+  },
+  "optimization": {
+    "strategy": "ensemble_surrogate",
+    "enabled_after_sensitivity": true,
+    "cases_per_iteration": 8,
+    "max_iterations": 12,
+    "random_seed": 17,
+    "local_search_fraction": 0.25,
+    "candidate_pool_size": 20000,
+    "surrogate_min_cases": 8,
+    "surrogate_n_estimators": 256,
+    "exploration_weight": 0.20,
+    "feasibility_weight": 2.00,
+    "diversity_fraction": 0.08,
+    "stop_when_stable_case_found": true
+  },
+  "scoring_weights": {
+    "stable_window": 100.0,
+    "width_error": 0.15,
+    "depth_error": 0.15,
+    "aspect_ratio_error": 100.0,
+    "aspect_ratio_bias": 25.0,
+    "aspect_ratio_slope": 25.0,
+    "comparison_window": 100.0,
+    "dimension_gate": 125.0,
+    "hard_runaway": 500.0,
+    "keyhole_missing": 25.0,
+    "missing_csv_penalty": 1000000.0
+  }
+}

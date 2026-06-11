@@ -1,0 +1,187 @@
+#!/bin/bash
+
+set -euo pipefail
+
+rootDir="$(cd "$(dirname "$0")" && pwd)"
+cd "$rootDir"
+
+config="${CONFIG:-mesh_convergence.json}"
+pythonExe="${PYTHON:-/home/kanak/.venv310/bin/python}"
+
+caseNames()
+{
+    "$pythonExe" - "$config" <<'PY'
+import json
+import sys
+cfg = json.load(open(sys.argv[1]))
+for case in cfg["cases"]:
+    print(case["name"])
+PY
+}
+
+caseValue()
+{
+    local caseName="$1"
+    local key="$2"
+
+    "$pythonExe" - "$config" "$caseName" "$key" <<'PY'
+import json
+import sys
+cfg = json.load(open(sys.argv[1]))
+name = sys.argv[2]
+key = sys.argv[3]
+case = next(item for item in cfg["cases"] if item["name"] == name)
+value = case[key]
+if isinstance(value, list):
+    print(" ".join(str(v) for v in value))
+else:
+    print(value)
+PY
+}
+
+patchCaseMesh()
+{
+    local runDir="$1"
+    local cells="$2"
+    local maxRefinement="$3"
+    local cores="$4"
+
+    "$pythonExe" - "$runDir" "$cells" "$maxRefinement" "$cores" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+run = Path(sys.argv[1])
+cells = tuple(sys.argv[2].split())
+max_ref = sys.argv[3]
+cores = sys.argv[4]
+
+block_mesh = run / "system" / "blockMeshDict"
+text = block_mesh.read_text()
+text = re.sub(
+    r"hex \(0 1 2 3 4 5 6 7\) \([^)]+\)",
+    f"hex (0 1 2 3 4 5 6 7) ({cells[0]} {cells[1]} {cells[2]})",
+    text,
+)
+block_mesh.write_text(text)
+
+dynamic_mesh = run / "constant" / "dynamicMeshDict"
+text = dynamic_mesh.read_text()
+text = re.sub(r"\bmaxRefinement\s+\d+\s*;", f"maxRefinement   {max_ref};", text)
+dynamic_mesh.write_text(text)
+
+decompose = run / "system" / "decomposeParDict"
+text = decompose.read_text()
+text = re.sub(r"\bnumberOfSubdomains\s+\d+\s*;", f"numberOfSubdomains  {cores};", text)
+decompose.write_text(text)
+PY
+}
+
+prepareRun()
+{
+    local name="$1"
+    local runDir="runs/$name"
+    local cells=""
+    local cores=""
+    local maxRefinement=""
+
+    cells="$(caseValue "$name" cells)"
+    cores="$(caseValue "$name" cores)"
+    maxRefinement="$("$pythonExe" - "$config" <<'PY'
+import json, sys
+print(json.load(open(sys.argv[1]))["max_refinement"])
+PY
+)"
+
+    if [ ! -d "$runDir" ]; then
+        echo "Creating $runDir"
+        mkdir -p "$runDir"
+        cp -a template/. "$runDir/"
+    else
+        echo "Using existing $runDir"
+    fi
+
+    patchCaseMesh "$runDir" "$cells" "$maxRefinement" "$cores"
+}
+
+collectStats()
+{
+    local name="$1"
+    local baseCellUm="$2"
+    local runDir="runs/$name"
+    local label="${baseCellUm}um"
+    local absorptivityCsv="$runDir/absorptivity_vs_time/absorptivity_vs_time.csv"
+    local geometryCsv="$runDir/post-processing-data/vtu_meltpool_geometry.csv"
+
+    mkdir -p stats/absorptivity stats/keyhole_depth stats/meltpool_depth
+
+    if [ -f "$absorptivityCsv" ]; then
+        cp "$absorptivityCsv" "stats/absorptivity/absorptivity_${label}.csv"
+    else
+        echo "WARNING: missing $absorptivityCsv" >&2
+    fi
+
+    if [ -f "$geometryCsv" ]; then
+        "$pythonExe" - "$geometryCsv" "$label" <<'PY'
+import csv
+import sys
+from pathlib import Path
+
+geometry = Path(sys.argv[1])
+label = sys.argv[2]
+root = geometry.parents[2].parents[0]
+
+rows = list(csv.DictReader(geometry.open()))
+
+outputs = [
+    ("keyhole_depth", "keyholeDepth_um"),
+    ("meltpool_depth", "meltPoolDepth_um"),
+]
+
+for folder, field in outputs:
+    out = Path("stats") / folder / f"{folder}_{label}.csv"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with out.open("w", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["time_s", field])
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({"time_s": row.get("time", ""), field: row.get(field, "")})
+PY
+    else
+        echo "WARNING: missing $geometryCsv" >&2
+    fi
+}
+
+for name in $(caseNames)
+do
+    baseCellUm="$(caseValue "$name" base_cell_um)"
+    runSim="$(caseValue "$name" run_sim)"
+    prepareRun "$name"
+
+    if [ "${FRESH:-0}" = "1" ]; then
+        rm -f "runs/$name/.mesh_convergence_complete"
+    fi
+
+    if [ "$runSim" != "True" ] && [ "$runSim" != "true" ] && [ "$runSim" != "1" ]; then
+        echo "Skipping $name because run_sim=false"
+        collectStats "$name" "$baseCellUm"
+        continue
+    fi
+
+    if [ -f "runs/$name/.mesh_convergence_complete" ]; then
+        echo "Skipping $name because completion marker exists"
+        collectStats "$name" "$baseCellUm"
+        continue
+    fi
+
+    echo "Running $name"
+    (
+        cd "runs/$name"
+        FRESH="${FRESH:-0}" PYTHON="$pythonExe" ./Allrun
+    )
+
+    collectStats "$name" "$baseCellUm"
+    touch "runs/$name/.mesh_convergence_complete"
+done
+
+echo "Mesh convergence pipeline complete."

@@ -1,0 +1,30 @@
+#!/bin/bash
+
+set -euo pipefail
+
+rootDir="$(cd "$(dirname "$0")" && pwd)"
+cd "$rootDir"
+
+for caseDir in runs/*
+do
+    [ -d "$caseDir" ] || continue
+
+    if [ -x "$caseDir/Allclean" ]; then
+        echo "Cleaning $caseDir"
+        (
+            cd "$caseDir"
+            ./Allclean
+        )
+    else
+        echo "Cleaning $caseDir without case Allclean"
+        rm -rf "$caseDir"/0 "$caseDir"/processor* "$caseDir"/VTK "$caseDir"/VTKs
+        rm -rf "$caseDir"/postProcessing "$caseDir"/post-processing-data
+        rm -rf "$caseDir"/absorptivity_vs_time
+        rm -f "$caseDir"/log.* "$caseDir"/*.foam "$caseDir"/output_*.out "$caseDir"/output_*.err
+    fi
+done
+
+rm -rf stats/absorptivity stats/keyhole_depth stats/meltpool_depth
+mkdir -p stats/absorptivity stats/keyhole_depth stats/meltpool_depth
+
+echo "Mesh convergence outputs cleaned."
