@@ -1,0 +1,11 @@
+#!/bin/bash
+
+set -e
+
+caseDir="$(cd "$(dirname "$0")" && pwd)"
+cd "$caseDir"
+
+pythonExe="${PYTHON:-/home/kanak/.venv310/bin/python}"
+export MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp}"
+
+exec "$pythonExe" calibrate_meltpool.py --config fine_zone_config.json --run "$@"

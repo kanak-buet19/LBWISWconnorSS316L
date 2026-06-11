@@ -1,0 +1,50 @@
+# Check the laserbeamFoam solvers compile correctly
+name: Build
+
+on:
+  push:
+  workflow_dispatch:
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        container-image:
+          - name: "OpenFOAM-v2506"
+            image: "opencfd/openfoam-dev:2506"
+            source: "/usr/lib/openfoam/openfoam2506/etc/bashrc"
+            buildflags: "-j"
+
+    container:
+      image: ${{ matrix.container-image.image }}
+      options: --user root
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Allwmake
+        shell: bash -l {0}
+        run: |
+          source ${{ matrix.container-image.source }}
+          ./Allwmake ${{ matrix.container-image.buildflags }}
+
+      - name: Alltest
+        shell: bash -l {0}
+        run: |
+          source ${{ matrix.container-image.source }}
+          cd tutorials
+          ./Alltest
+
+      - name: Upload test logs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs.${{ matrix.container-image.name }}
+          path: tutorialsTest/logs
+          retention-days: 10
+
+      - name: Set job status
+        if: ${{ failure() }}
+        run: echo "::error::Alltest failed, marking job as failed"

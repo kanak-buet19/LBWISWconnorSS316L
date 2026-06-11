@@ -1,0 +1,17 @@
+#!/bin/bash
+cd "${0%/*}" || exit  # Run from this directory
+
+# Clean libraries
+(cd src && ./Allwclean)
+
+# Clean applications
+(cd applications && ./Allwclean)
+
+# Clean all tutorials
+(cd tutorials && ./Allclean)
+
+# Clear all build logs
+echo; echo "Removing all log.Allwmake build logs"; echo
+find . -name log.Allwmake | xargs rm
+
+#------------------------------------------------------------------------------
