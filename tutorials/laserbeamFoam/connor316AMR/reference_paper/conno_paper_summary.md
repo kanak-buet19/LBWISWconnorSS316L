@@ -98,23 +98,21 @@
 - Gravity does not appear explicitly in governing equations
 
 ### Governing Equation
-```
-∂/∂x[k(T)·∂T/∂x] + ∂/∂y[k(T)·∂T/∂y] + ∂/∂z[k(T)·∂T/∂z] + Q̇(T,t) = ρ(T)·Cp(T)·∂T/∂t
-```
+
+$$\frac{\partial}{\partial x}\!\left[k(T)\frac{\partial T}{\partial x}\right] + \frac{\partial}{\partial y}\!\left[k(T)\frac{\partial T}{\partial y}\right] + \frac{\partial}{\partial z}\!\left[k(T)\frac{\partial T}{\partial z}\right] + \dot{Q}(T,t) = \rho(T)\,C_p(T)\,\frac{\partial T}{\partial t}$$
 
 ### Heat Source Model
 Hybrid: **Conical volumetric** (finger penetration) + **Gaussian surface** (crown profile)
 
 Volumetric heat source:
-```
-Q(x,y,z) = Q₀ · exp[-(x² + y²) / r₀(z)²]
-r₀(z) = rᵤ + [(rᵢ - rᵤ)/(zᵢ - zᵤ)] · (z - zᵤ)
-```
+
+$$Q(x,y,z) = Q_0 \exp\!\left[-\frac{x^2 + y^2}{r_0(z)^2}\right]$$
+
+$$r_0(z) = r_u + \frac{r_i - r_u}{z_i - z_u}\,(z - z_u)$$
 
 Radiation boundary (Stefan-Boltzmann):
-```
-Q̇ᵣ/A = -ε·σ·(T⁴ - T∞⁴)
-```
+
+$$\frac{\dot{Q}_r}{A} = -\varepsilon\,\sigma\,(T^4 - T_\infty^4)$$
 
 ### Boundary Conditions
 - **No convective coefficient** (vacuum conditions)
@@ -190,8 +188,8 @@ Q̇ᵣ/A = -ε·σ·(T⁴ - T∞⁴)
 
 | Number | Formula | Earth Value | Low-G Value | Significance |
 |---|---|---|---|---|
-| Marangoni (Ma) | `\|dγ/dT\| · ΔT · w / (μ · α)` | ~2.6 × 10⁴ | ~2.6 × 10⁴ | Surface tension dominates over buoyancy |
-| Rayleigh (Ra) | `g · β · ΔT · L³ / (ν · α)` | 53.9 | 1.6 | Buoyancy convection much weaker in low-G |
+| Marangoni (Ma) | $\displaystyle\frac{\|d\gamma/dT\|\,\Delta T\,w}{\mu\,\alpha}$ | ~2.6 × 10⁴ | ~2.6 × 10⁴ | Surface tension dominates over buoyancy |
+| Rayleigh (Ra) | $\displaystyle\frac{g\,\beta\,\Delta T\,L^3}{\nu\,\alpha}$ | 53.9 | 1.6 | Buoyancy convection much weaker in low-G |
 
 > The Marangoni effect is gravity-independent; buoyancy (Ra) scales directly with g. This explains why microstructure is similar across gravities while porosity morphology differs slightly.
 
@@ -207,11 +205,7 @@ Q̇ᵣ/A = -ε·σ·(T⁴ - T∞⁴)
 | Dynamic viscosity at 2400 °C | μ | 1.98 × 10⁻³ Pa·s (1.98 cP) | Literature |
 | Thermal diffusivity at 2400 °C | α | 4.4 × 10⁻⁶ m²/s | Literature |
 
-```
-Ma = |dγ/dT| · ΔT · w / (μ · α)
-   = (2.4×10⁻⁴) × 1000 × (9.5×10⁻⁴) / [(1.98×10⁻³) × (4.4×10⁻⁶)]
-   = 2.6 × 10⁴
-```
+$$\text{Ma} = \frac{|d\gamma/dT|\,\Delta T\,w}{\mu\,\alpha} = \frac{(2.4\times10^{-4})\times 1000\times(9.5\times10^{-4})}{(1.98\times10^{-3})\times(4.4\times10^{-6})} = 2.6\times10^{4}$$
 
 ---
 
