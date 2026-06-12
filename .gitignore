@@ -89,7 +89,6 @@ SunOS*Gcc*/
 *.mp4
 
 # Connor 316L AMR tutorial - large simulation data
-tutorials/laserbeamFoam/connor316AMR/test_run_*/
 tutorials/laserbeamFoam/connor316AMR/meltpool_calibration/calibration_coarse_best/run_*/
 tutorials/laserbeamFoam/connor316AMR/meltpool_calibration/runs/
 tutorials/laserbeamFoam/connor316AMR/backups/

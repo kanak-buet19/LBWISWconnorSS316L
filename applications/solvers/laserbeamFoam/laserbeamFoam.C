@@ -212,6 +212,9 @@ int main(int argc, char *argv[])
         }
         meltTrackID.correctBoundaryConditions();
 
+        Info<< "TMax = " << gMax(T.primitiveField())
+            << ", pVapMax = " << gMax(pVap.primitiveField()) << endl;
+
         runTime.write();
 
         // Write ray paths to VTK files

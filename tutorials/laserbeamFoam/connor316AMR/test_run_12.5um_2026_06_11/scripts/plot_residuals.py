@@ -37,6 +37,7 @@ RE_EPSILON = re.compile(r'Correcting epsilon1,\s*mean residual\s*=\s*[\d.eE+\-]+
 RE_CO      = re.compile(r'^Courant Number mean:\s*([\d.eE+\-]+)\s+max:\s*([\d.eE+\-]+)')
 RE_ICO     = re.compile(r'^Interface Courant Number mean:\s*([\d.eE+\-]+)\s+max:\s*([\d.eE+\-]+)')
 RE_DT      = re.compile(r'^deltaT\s*=\s*([\d.eE+\-]+)')
+RE_TMAX_PVAP = re.compile(r'^TMax\s*=\s*([\d.eE+\-]+),\s*pVapMax\s*=\s*([\d.eE+\-]+)')
 # ─────────────────────────────────────────────────────────────────────────────
 
 STYLE = {
@@ -44,6 +45,8 @@ STYLE = {
     'alpha.metal':  dict(color='#457b9d', lw=1.2, label='alpha.metal'),
     'p_rgh':        dict(color='#2d6a4f', lw=1.2, label='p_rgh'),
     'epsilon1_max': dict(color='#9b2226', lw=1.4, ls='--', label='epsilon1 max resid'),
+    'TMax':         dict(color='#9d4edd', lw=1.2, label='TMax'),
+    'pVapMax':      dict(color='#0077b6', lw=1.2, label='pVapMax (kPa)'),
 }
 
 
@@ -86,6 +89,12 @@ def parse_log(path):
             m = RE_DT.match(line.lstrip())
             if m:
                 deltat.append((current_time, float(m.group(1))))
+                continue
+
+            m = RE_TMAX_PVAP.match(line.lstrip())
+            if m:
+                data['TMax'].append((current_time, float(m.group(1))))
+                data['pVapMax'].append((current_time, float(m.group(2))))
                 continue
 
             m = RE_SOLVER.search(line)
@@ -146,9 +155,9 @@ def save_plot(data, courant, icourant, deltat, end_time):
     last_t = max(all_times) if all_times else 0.0
     now_str = time.strftime('%Y-%m-%d %H:%M:%S')
 
-    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
     fig.suptitle(
-        f"laserbeamFoam — live residuals    |    "
+        f"laserbeamFoam — live residuals & physical extrema    |    "
         f"sim time: {last_t*1e6:.2f} µs    |    plotted: {now_str}",
         fontsize=11
     )
@@ -181,6 +190,17 @@ def save_plot(data, courant, icourant, deltat, end_time):
     ax.legend(fontsize=8, loc='upper right')
     ax.grid(True, which='both', ls=':', alpha=0.4)
 
+    # [0,2]: Maximum Temperature
+    ax = axes[0, 2]
+    if data['TMax']:
+        t, tmax = zip(*_us(data['TMax']))
+        ax.plot(t, tmax, **STYLE['TMax'])
+    ax.set_ylabel('Temperature (K)')
+    ax.set_xlabel('Time (µs)')
+    ax.set_title('Maximum Temperature')
+    ax.legend(fontsize=8, loc='upper right')
+    ax.grid(True, ls=':', alpha=0.4)
+
     # [1,0]: Courant
     ax = axes[1, 0]
     if courant:
@@ -206,6 +226,18 @@ def save_plot(data, courant, icourant, deltat, end_time):
     ax.set_ylabel('deltaT (s)')
     ax.set_xlabel('Time (µs)')
     ax.set_title('Timestep size')
+    ax.legend(fontsize=8, loc='upper right')
+    ax.grid(True, which='both', ls=':', alpha=0.4)
+
+    # [1,2]: Maximum Recoil Pressure
+    ax = axes[1, 2]
+    if data['pVapMax']:
+        t, pmax = zip(*_us(data['pVapMax']))
+        pmax_kpa = [p / 1000.0 for p in pmax]
+        ax.semilogy(t, pmax_kpa, **STYLE['pVapMax'])
+    ax.set_ylabel('Recoil Pressure (kPa)')
+    ax.set_xlabel('Time (µs)')
+    ax.set_title('Maximum Recoil Pressure')
     ax.legend(fontsize=8, loc='upper right')
     ax.grid(True, which='both', ls=':', alpha=0.4)
 
