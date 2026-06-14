@@ -30,10 +30,12 @@
 
         TRHS.correctBoundaryConditions();
 
+        const volScalarField Tpos(max(T, T_ambient));
+
         Qv =
             0.82*LatentHeatVap*Mm*p0
-           *Foam::exp(LatentHeatVap*Mm*((T - Tvap_atm)/(R*T*Tvap_atm)))
-           /Foam::pow(2*M_PI*Mm*R*T,0.5);
+           *Foam::exp(LatentHeatVap*Mm*((Tpos - Tvap_atm)/(R*Tpos*Tvap_atm)))
+           /Foam::pow(2*M_PI*Mm*R*Tpos, 0.5);
 
         Qv.correctBoundaryConditions();
 
