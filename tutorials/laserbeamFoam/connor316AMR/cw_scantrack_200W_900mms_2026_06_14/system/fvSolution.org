@@ -34,13 +34,10 @@ solvers
 
     "pcorr.*"
     {
-        solver          GAMG;
-        tolerance       1e-2;
+        solver          PCG;
+        preconditioner  DIC;
+        tolerance       1e-5;
         relTol          0;
-        smoother        GaussSeidel;
-        agglomerator    faceAreaPair;
-        mergeLevels     1;
-        nCellsInCoarsestLevel 10;
     }
 
     p_rgh
@@ -90,7 +87,7 @@ MELTING
     minTempCorrector 1;
     maxTempCorrector 20;
     epsilonTolerance 1e-6;
-    epsilonRelaxation 0.5;
+    epsilonRelaxation 0.9;
     
     damperSwitch true;//false;//true;
 }

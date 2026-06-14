@@ -16,25 +16,29 @@ FoamFile
 
 convertToMeters 1.0;
 
-// Small one-pulse Connor/Riffel 316L domain for fast AMR studies:
-//   x = width, y = depth/laser-entry direction, z = scan direction.
-//   Base mesh spacing is uniform: 50 um in x, y, and z.
+// CW single-track 316L bareplate calibration (Hofmann 2026).
+// P=200W, v=900mm/s, d_laser=0.05mm. Target: depth~94um, width~115um.
+// x=cross-track, y=depth (y=0=top/atmosphere), z=scan direction.
+// Base 32 um; 2-level AMR → 8 um near melt pool.
+//   x: 0.512 mm  (16 cells — ~4.5x pool half-width)
+//   y: 0.320 mm  (10 cells — 0.128 mm gas + 0.192 mm substrate)
+//   z: 1.280 mm  (40 cells — 0.10 mm lead + 1.00 mm track + 0.18 mm lag)
 
 vertices
 (
-    (0       0       0)
-    (1.536e-3  0       0)
-    (1.536e-3  1.536e-3  0)
-    (0       1.536e-3  0)
-    (0       0       1.536e-3)
-    (1.536e-3  0       1.536e-3)
-    (1.536e-3  1.536e-3  1.536e-3)
-    (0       1.536e-3  1.536e-3)
+    (0         0         0        )  // 0
+    (0.512e-3  0         0        )  // 1
+    (0.512e-3  0.320e-3  0        )  // 2
+    (0         0.320e-3  0        )  // 3
+    (0         0         1.280e-3 )  // 4
+    (0.512e-3  0         1.280e-3 )  // 5
+    (0.512e-3  0.320e-3  1.280e-3 )  // 6
+    (0         0.320e-3  1.280e-3 )  // 7
 );
 
 blocks
 (
-    hex (0 1 2 3 4 5 6 7) (48 48 48) simpleGrading (1 1 1)
+    hex (0 1 2 3 4 5 6 7) (16 10 40) simpleGrading (1 1 1)
 );
 
 edges

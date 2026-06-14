@@ -10,43 +10,39 @@ FoamFile
     version     2.0;
     format      ascii;
     class       volScalarField;
-    object      p_rgh;
+    object      T;
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 dimensions      [0 0 0 1 0 0 0];
 
-internalField   uniform 900.0;
+internalField   uniform 300.0;
 
 boundaryField
 {
-
- //   #includeEtc "caseDicts/setConstraintTypes"
-    
-    
-	frontAndBack{
-type fixedGradient;
-gradient uniform -50.0;
-	}
+    frontAndBack
+    {
+        type            zeroGradient;
+    }
 
     lowerWall
     {
-type zeroGradient;
+        type            zeroGradient;
     }
 
     atmosphere
     {
-type zeroGradient;
+        type            zeroGradient;
     }
-rightWall
+
+    rightWall
     {
-type fixedGradient;
-gradient uniform -50.0;
+        type            zeroGradient;
     }
+
     leftWall
     {
-type fixedGradient;
-gradient uniform -50.0;
+        type            zeroGradient;
     }
 
     defaultFaces

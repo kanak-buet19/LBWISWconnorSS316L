@@ -55,7 +55,7 @@ metal
         (5000   790.0)
     );
 
-    elec_resistivity	1.2e-6;        // Electrical resistivity [ohm m]; calibrated (50um mesh, score 7.79); coarse 125um best was 2.45e-6
+    elec_resistivity	7e-7;        // Electrical resistivity [ohm m]; calibrated (50um mesh, score 7.79); coarse 125um best was 2.45e-6
 }
 
 gas

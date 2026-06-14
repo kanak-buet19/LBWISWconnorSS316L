@@ -30,7 +30,7 @@ divSchemes
     div(phi,alpha)  Gauss vanLeer;
     div(phirb,alpha) Gauss linear;
     div(((rho*nuEff)*dev2(T(grad(U))))) Gauss linear;
-    div(rhoPhi,epsilon1)	Gauss vanLeer01;
+    div(rhoPhi,epsilon1)	Gauss linear;//Gauss vanLeer01;
     div(rhophicp,T)   Gauss upwind;
 }
 

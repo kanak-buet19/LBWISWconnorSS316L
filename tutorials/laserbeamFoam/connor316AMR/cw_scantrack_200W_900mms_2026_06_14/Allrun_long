@@ -1,5 +1,6 @@
 #!/bin/bash
 
+set -e
 set -o pipefail
 
 ## Notes:
@@ -25,23 +26,29 @@ postProcessWrittenTime()
     local timeName="$1"
     local vtkFile=""
 
+    echo "[DEBUG] Post-processing output time step ${timeName}..."
     if ! ./foamVTK.sh "$timeName"; then
-        echo "WARNING: foamVTK.sh failed for time ${timeName}" >&2
-        return 0
+        echo "[ERROR] foamVTK.sh failed for time step ${timeName}! Terminating simulation." >&4
+        kill 0
+        exit 1
     fi
 
     if ${analyzeMeltpool}; then
         vtkFile="$(latestInternalVTU)"
 
         if [ -z "$vtkFile" ]; then
-            echo "WARNING: no internal.vtu found after converting ${timeName}" >&2
-            return 0
+            echo "[ERROR] No internal.vtu found after converting time step ${timeName}! Terminating simulation." >&4
+            kill 0
+            exit 1
         fi
 
+        echo "[DEBUG] Running meltpool analysis on ${vtkFile}..."
         MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp}" "$pythonExe" \
             scripts/analyze_meltpool_vtu.py \
             --vtk-file "$vtkFile" \
-            || echo "WARNING: meltpool analysis failed for ${vtkFile}" >&2
+            --surface-y-um 128 \
+            || { echo "[ERROR] Meltpool analysis failed for ${vtkFile}! Terminating simulation." >&4; kill 0; exit 1; }
+        echo "[DEBUG] Meltpool analysis completed successfully for ${vtkFile}."
     fi
 }
 
@@ -69,7 +76,8 @@ convertOnWrite()
 
     queueFile="$(mktemp -u ".postProcessQueue.XXXXXX")"
     mkfifo "$queueFile"
-    postProcessQueueWorker "$queueFile" &
+    exec 4>&2
+    postProcessQueueWorker "$queueFile" >> log.postProcess 2>&1 &
     workerPid="$!"
     exec 3>"$queueFile"
     rm -f "$queueFile"
@@ -95,6 +103,7 @@ convertOnWrite()
     printf '%s\n' "__DONE__" >&3
     exec 3>&-
     wait "$workerPid"
+    exec 4>&-
 }
 
 
@@ -114,60 +123,66 @@ else
 fi
 
 if ${bResume}; then
-    echo "Found existing time directories. Resuming simulation..."
+    echo "[DEBUG] Found existing time directories. Resuming simulation..."
+    if [ ! -d constant/polyMesh ]; then
+        echo "[DEBUG] Base mesh constant/polyMesh is missing. Re-running blockMesh..."
+        blockMesh >> log.blockMesh 2>&1 || { echo "[ERROR] blockMesh failed during resume! Exiting."; exit 1; }
+        echo "[DEBUG] blockMesh completed successfully."
+    fi
 else
-    echo "Copying 'initial' to 0"
-    cp -r initial 0
+    echo "[DEBUG] Cleaning old post-processing logs..."
+    rm -f log.postProcess
+    echo "[DEBUG] Copying 'initial' to 0..."
+    cp -r initial 0 || { echo "[ERROR] Failed to copy initial to 0. Exiting."; exit 1; }
 
     # remove `.orig` extensions where applicable
     find 0 -name "*.orig" -exec bash -c 'cp "$0" "${0%.orig}"' {} \;
 
-    runApplication blockMesh
-    runApplication setFields
+    echo "[DEBUG] Running blockMesh..."
+    blockMesh >> log.blockMesh 2>&1 || { echo "[ERROR] blockMesh failed! Exiting."; exit 1; }
+    echo "[DEBUG] blockMesh completed successfully."
+
+    echo "[DEBUG] Running setFields..."
+    setFields >> log.setFields 2>&1 || { echo "[ERROR] setFields failed! Exiting."; exit 1; }
+    echo "[DEBUG] setFields completed successfully."
 fi
 
-# Launch live residual watcher in background (works for both serial and parallel)
-mkdir -p residuals
-MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp}" "$pythonExe" \
-    scripts/plot_residuals.py \
-    > residuals/watcher.log 2>&1 &
-watcherPid=$!
-echo "Residual watcher started (PID ${watcherPid})"
+appendFlag=""
+if ${bResume}; then
+    appendFlag="--append"
+fi
 
 if ${bParallel}; then
     if ! ${bResume}; then
-        decomposePar 2>&1 | tee log.decomposePar
+        echo "[DEBUG] Decomposing mesh using decomposePar..."
+        decomposePar > log.decomposePar 2>&1 || { echo "[ERROR] decomposePar failed! Exiting."; exit 1; }
+        echo "[DEBUG] Decomposing mesh completed successfully."
     fi
 
     nCores=$(\
         foamDictionary -entry numberOfSubdomains \
                        -value system/decomposeParDict)
 
+    echo "[DEBUG] Starting laserbeamFoam in parallel on $nCores cores..."
     if ${convertVTK}; then
         mpirun --oversubscribe -np $nCores \
             laserbeamFoam \
             -parallel \
-            2>&1 | convertOnWrite | tee log.laserbeamFoam
+            2>&1 | convertOnWrite | "$pythonExe" scripts/parse_simulation_log.py ${appendFlag} || { echo "[ERROR] Parallel simulation failed! Exiting."; exit 1; }
     else
         mpirun --oversubscribe -np $nCores \
             laserbeamFoam \
             -parallel \
-            2>&1 | tee log.laserbeamFoam
+            2>&1 | "$pythonExe" scripts/parse_simulation_log.py ${appendFlag} || { echo "[ERROR] Parallel simulation failed! Exiting."; exit 1; }
     fi
 else
+    echo "[DEBUG] Starting laserbeamFoam in single-processor mode..."
     if ${convertVTK}; then
-        laserbeamFoam 2>&1 | convertOnWrite | tee log.laserbeamFoam
+        laserbeamFoam 2>&1 | convertOnWrite | "$pythonExe" scripts/parse_simulation_log.py ${appendFlag} || { echo "[ERROR] Simulation failed! Exiting."; exit 1; }
     else
-        laserbeamFoam 2>&1 | tee log.laserbeamFoam
+        laserbeamFoam 2>&1 | "$pythonExe" scripts/parse_simulation_log.py ${appendFlag} || { echo "[ERROR] Simulation failed! Exiting."; exit 1; }
     fi
 fi
-
-kill "$watcherPid" 2>/dev/null || true
+echo "[DEBUG] Simulation completed successfully."
 
 touch cunninghamValidation.foam
-
-# Final residual plot (captures any timesteps written after watcher last ran)
-echo "Saving final residual plot..."
-MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp}" "$pythonExe" \
-    scripts/plot_residuals.py --once \
-    || echo "WARNING: residual plot failed" >&2

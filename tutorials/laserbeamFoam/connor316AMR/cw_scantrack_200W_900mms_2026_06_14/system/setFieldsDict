@@ -27,7 +27,9 @@ regions
 
     boxToCell
     {
-        box (0 0.3e-3 0) (1.536e-3 1.536e-3 1.536e-3);
+        // gas layer: y=0 to 0.128mm (4 base cells @ 32um)
+        // metal:     y=0.128mm to 0.320mm (6 base cells)
+        box (0 0.128e-3 0) (0.512e-3 0.320e-3 1.280e-3);
         fieldValues
         (
             volScalarFieldValue alpha.metal 1

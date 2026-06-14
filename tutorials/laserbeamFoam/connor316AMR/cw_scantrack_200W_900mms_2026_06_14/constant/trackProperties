@@ -16,8 +16,8 @@ FoamFile
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
 // Duration of one laser track in seconds.
-// Keep in sync with timeVsLaserPosition/timeVsLaserPower for this case.
-trackDuration      0.375;
+// 1.0 mm / 900 mm/s = 1.1111 ms.
+trackDuration      8.8889e-4;
 
 // Extra cell layers around meltTrackID for conservative mesh refinement.
 meshRefinementBufferLayers 2;
