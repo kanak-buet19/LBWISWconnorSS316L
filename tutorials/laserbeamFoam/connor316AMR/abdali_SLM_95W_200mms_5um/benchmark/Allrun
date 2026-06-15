@@ -1,0 +1,23 @@
+#!/bin/bash
+# Wrapper to source OpenFOAM environment and run the python benchmark script
+
+# Source OpenFOAM 2412 environment (disable set -e temporarily as etc/bashrc can return non-zero)
+if [ -f /usr/lib/openfoam/openfoam2412/etc/bashrc ]; then
+    set +e
+    source /usr/lib/openfoam/openfoam2412/etc/bashrc
+    set -e
+else
+    echo "ERROR: OpenFOAM 2412 bashrc not found. Please ensure OpenFOAM 2412 is installed."
+    exit 1
+fi
+
+# Run the benchmark orchestrator script
+caseDir="$(cd "$(dirname "$0")" && pwd)"
+export PYTHON="${PYTHON:-/home/kanak/.venv/venv314/bin/python}"
+"$PYTHON" "$caseDir/run_benchmark.py" "$@"
+
+# Display the summary to the console
+if [ -f "$caseDir/benchmark_summary.md" ]; then
+    echo -e "\n"
+    cat "$caseDir/benchmark_summary.md"
+fi
