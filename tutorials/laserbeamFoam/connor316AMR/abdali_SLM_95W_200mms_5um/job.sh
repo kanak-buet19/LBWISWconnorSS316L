@@ -2,7 +2,7 @@
 #SBATCH --job-name=abdali_SLM
 #SBATCH --time=24:00:00
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=64
+#SBATCH --ntasks-per-node=32
 #SBATCH --account=mch250110
 #SBATCH --output=output_%j.out
 #SBATCH --error=output_%j.err
@@ -13,7 +13,7 @@
 # OpenFOAM 2506 inside Apptainer; post-processing Python on host conda (isw_env).
 #
 # Submit with:   sbatch job.sh
-# Rank count is set by system/decomposeParDict (numberOfSubdomains = 64);
+# Rank count is set by system/decomposeParDict (numberOfSubdomains = 32);
 # keep --ntasks-per-node in sync with that value.
 
 set -Eeo pipefail

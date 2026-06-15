@@ -93,5 +93,7 @@ recoilTransitionWidth       10; // Smooth recoil activation width above Tvap [K]
 Mm	0.056;                       // Molar mass [kg/mol]
 LatentHeatVap 6.33e6;            // Latent heat of vaporization [J/kg]
 
+V_scan          0.9;            // Scan speed (900 mm/s)
+scanDirection   (0 0 1);        // Scanning along +Z direction
 
 // ************************************************************************* //

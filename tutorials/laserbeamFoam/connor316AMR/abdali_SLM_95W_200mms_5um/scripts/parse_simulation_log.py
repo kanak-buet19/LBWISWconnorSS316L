@@ -21,9 +21,9 @@ def parse_control_dict(case_dir: Path) -> float:
     return end_time
 
 def get_sim_parameters(case_dir: Path) -> tuple[float, float, float, float]:
-    p_laser = 200.0
-    v_scan = 900.0
-    d_laser = 0.05
+    p_laser = 95.0
+    v_scan = 200.0
+    d_laser = 0.08
     t_powder = 0.0
 
     # 1. Parse Laser Power from constant/timeVsLaserPower
@@ -91,9 +91,9 @@ def get_experimental_metrics(case_dir: Path) -> tuple[float, float]:
                 t_val = float(r[4])
                 
                 if (abs(p_val - p_laser) < tol and
-                    abs(v_val - v_scan) < tol and
-                    abs(d_val - d_laser) < tol and
-                    abs(t_val - t_powder) < tol):
+                     abs(v_val - v_scan) < tol and
+                     abs(d_val - d_laser) < tol and
+                     abs(t_val - t_powder) < tol):
                     matching_widths.append(float(r[5]))
                     matching_depths.append(float(r[6]))
             except ValueError:
