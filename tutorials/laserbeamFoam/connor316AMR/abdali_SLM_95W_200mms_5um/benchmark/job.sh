@@ -6,6 +6,8 @@
 #SBATCH --account=mch250110
 #SBATCH --output=output_%j.out
 #SBATCH --error=output_%j.err
+#SBATCH --mail-user=rakibul.buet19@gmail.com
+#SBATCH --mail-type=END,FAIL
 
 # Autogenous SLM 316L single-track parallel scaling benchmark (Abdali parameters).
 # Sweeps across 4, 8, 16, 24, and 32 cores for a 0.09ms simulation test.

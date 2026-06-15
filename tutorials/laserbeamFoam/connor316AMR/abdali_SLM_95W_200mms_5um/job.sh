@@ -6,6 +6,8 @@
 #SBATCH --account=mch250110
 #SBATCH --output=output_%j.out
 #SBATCH --error=output_%j.err
+#SBATCH --mail-user=rakibul.buet19@gmail.com
+#SBATCH --mail-type=END,FAIL
 
 # Autogenous SLM 316L single-track case (Abdali paper parameters).
 # P=95W, v=200mm/s, d_laser=0.08mm.
