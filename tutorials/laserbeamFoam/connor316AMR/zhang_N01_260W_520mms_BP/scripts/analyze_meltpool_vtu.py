@@ -23,10 +23,10 @@ from scipy.interpolate import griddata
 
 NX, NZ, NY = 180, 180, 180
 INTERP_METHOD = "linear"
-SURFACE_Y_UM = 300
+SURFACE_Y_UM = 100      # gas layer = 100 um; metal surface at y = 100 um (y=0 is atmosphere)
 PDF_DPI = 150
-EXP_SUMMARY_CSV = Path(__file__).resolve().parents[2] / "exp_figure" / "exp_weld12_earth_summary.csv"
-EXP_MASK_IMAGE = Path(__file__).resolve().parents[2] / "exp_figure" / "exp_weld12_earth_mask.png"
+EXP_SUMMARY_CSV = Path(__file__).resolve().parents[1] / "exp_figure" / "zhang_exp_summary.csv"
+EXP_MASK_IMAGE = Path(__file__).resolve().parents[1] / "exp_figure" / "zhang_exp_mask.png"
 
 
 CSV_FIELDS = [

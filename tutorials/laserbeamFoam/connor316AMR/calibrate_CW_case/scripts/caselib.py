@@ -161,14 +161,51 @@ def _scale_table(text: str, name: str, factor: float) -> str:
     return text[:m.start()] + m.group(1) + body + m.group(3) + text[m.end():]
 
 
+def _apply_liquid_slope(text: str, name: str, T_liq: float,
+                        slope: float, T_cap: float = 3122.0) -> str:
+    """Add linear slope dX/dT to liquid-phase (T >= T_liq) table entries.
+
+    Applied AFTER _scale_table so the slope is additive on top of the scaled
+    liquid base value.  Values above T_cap (Tvap) are pinned to the T_cap
+    delta so the far-field extrapolation stays physical.
+    """
+    if slope == 0.0:
+        return text
+    m = re.search(rf"({name}[^\n]*\n\s*\()(.*?)(\n\s*\)\s*;)", text, re.S)
+    if not m:
+        raise ValueError(f"table '{name}' not found for liquid-slope patch")
+
+    def _row(mm: re.Match) -> str:
+        T = float(mm.group(1))
+        val = float(mm.group(2))
+        if T >= T_liq:
+            T_eff = min(T, T_cap)
+            val += slope * (T_eff - T_liq)
+        return f"({mm.group(1)}    {g(val)})"
+
+    body = re.sub(r"\(\s*([0-9.eE+-]+)\s+([0-9.eE+-]+)\s*\)", _row, m.group(2))
+    return text[:m.start()] + m.group(1) + body + m.group(3) + text[m.end():]
+
+
 def patch_transportProperties(path: Path, params: dict) -> None:
     t = path.read_text()
     t = _sub_entry(t, "elec_resistivity", g(params["elec_resistivity"]))
     t = _sub_entry(t, "beta_r", g(params["beta_r"]))
+    t = _sub_entry(t, "sigma", g(params["sigma"]))
+    t = _sub_entry(t, "Marangoni_Constant", g(params["Marangoni_Constant"]))
+    t = _sub_entry(t, "LatentHeatVap", g(params["LatentHeatVap"]))
     # metal rho only (gas rho = 1, no collision with baseline 7950)
     t = re.sub(r"(\brho\s+)7950(\.\d+)?\b", rf"\g<1>{g(params['rho'])}", t, count=1)
+    # metal nu first (gas nu is 1.48e-05, comes after metal block)
+    t = re.sub(r"(\bnu\s+)7e-7\b", rf"\g<1>{g(params['nu'])}", t, count=1)
+    # LatentHeat (fusion): requires trailing whitespace to avoid matching LatentHeatVap
+    t = _sub_entry(t, "LatentHeat", g(params["LatentHeat"]))
+    # scale entire cp/kappa tables then add liquid slope on top
     t = _scale_table(t, "table_cp", params["cp_scale"])
     t = _scale_table(t, "table_kappa", params["kappa_scale"])
+    T_LIQ = 1723.0
+    t = _apply_liquid_slope(t, "table_kappa", T_LIQ, params["kappa_liquid_slope"])
+    t = _apply_liquid_slope(t, "table_cp",    T_LIQ, params["cp_liquid_slope"])
     path.write_text(t)
 
 

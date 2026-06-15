@@ -123,8 +123,11 @@ def sim_progress(case_dir: Path) -> tuple[float, float | None] | None:
 
 
 def fmt_params(p: dict) -> str:
-    return (f"elec={p['elec_resistivity']:.2e} cp={p['cp_scale']:.3f} "
-            f"k={p['kappa_scale']:.3f} rho={p['rho']:.0f} br={p['beta_r']:.4f}")
+    parts = []
+    for k, v in p.items():
+        abbr = k[:5]
+        parts.append(f"{abbr}={v:.3g}")
+    return " ".join(parts)
 
 
 # --------------------------------------------------------------------------- #
@@ -217,21 +220,29 @@ class Calibrator:
         for cid in range(len(self.candidates)):
             self.queue.append(self.build_job(cid, self.cases[0]))
 
-    def maybe_enqueue_second(self, job: Job) -> None:
-        if len(self.cases) < 2:
+    def maybe_enqueue_next(self, job: Job) -> None:
+        try:
+            current_idx = next(i for i, c in enumerate(self.cases) if c["name"] == job.name)
+        except StopIteration:
             return
+        next_idx = current_idx + 1
+        if next_idx >= len(self.cases):
+            return
+
         rec = self.records[job.cand_id]
-        first_err = rec["cases"].get(self.cases[0]["name"], {}).get("case_error")
-        skip = (self.early.get("skipSecondCaseIfFirstBad", True)
-                and first_err is not None and first_err == first_err
-                and first_err > self.early["errorThreshold"])
-        if skip:
-            log(f"cand {job.cand_id:02d} skip {self.cases[1]['name']} "
-                f"(case1 err {first_err*100:.0f}% > "
-                f"{self.early['errorThreshold']*100:.0f}%)")
-            rec["cases"][self.cases[1]["name"]] = {"status": "skipped"}
-            return
-        self.queue.append(self.build_job(job.cand_id, self.cases[1]))
+        # Gate on case[0] error: if first case badly off, skip ALL remaining cases
+        if self.early.get("skipSecondCaseIfFirstBad", True):
+            first_err = rec["cases"].get(self.cases[0]["name"], {}).get("case_error")
+            if (first_err is not None and first_err == first_err
+                    and first_err > self.early["errorThreshold"]):
+                for case_cfg in self.cases[next_idx:]:
+                    log(f"cand {job.cand_id:02d} skip {case_cfg['name']} "
+                        f"(case0 err {first_err*100:.0f}% > "
+                        f"{self.early['errorThreshold']*100:.0f}%)")
+                    rec["cases"][case_cfg["name"]] = {"status": "skipped"}
+                return
+
+        self.queue.append(self.build_job(job.cand_id, self.cases[next_idx]))
 
     # -- main loop --------------------------------------------------------- #
     def total_planned(self) -> int:
@@ -308,7 +319,7 @@ class Calibrator:
                     job.note = why
                     log(f"cand {job.cand_id:02d} {job.name} ABORT - {why}")
                     self._record_job(job, evaluate=True)
-                    self.maybe_enqueue_second(job)
+                    self.maybe_enqueue_next(job)
                     self.done_count += 1
                     continue
             # timeout
@@ -318,7 +329,7 @@ class Calibrator:
                 job.note = "timeout"
                 log(f"cand {job.cand_id:02d} {job.name} TIMEOUT")
                 self._record_job(job, evaluate=True)
-                self.maybe_enqueue_second(job)
+                self.maybe_enqueue_next(job)
                 self.done_count += 1
                 continue
             if rc is None:
@@ -330,7 +341,7 @@ class Calibrator:
                 job.note = f"exit {rc}"
             self._record_job(job, evaluate=True)
             self._report_finish(job)
-            self.maybe_enqueue_second(job)
+            self.maybe_enqueue_next(job)
             self.done_count += 1
         self.running = still
 

@@ -46,7 +46,7 @@ postProcessWrittenTime()
         MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp}" "$pythonExe" \
             scripts/analyze_meltpool_vtu.py \
             --vtk-file "$vtkFile" \
-            --surface-y-um 128 \
+            --surface-y-um 140 \
             || { echo "[ERROR] Meltpool analysis failed for ${vtkFile}! Terminating simulation." >&4; kill 0; exit 1; }
         echo "[DEBUG] Meltpool analysis completed successfully for ${vtkFile}."
     fi

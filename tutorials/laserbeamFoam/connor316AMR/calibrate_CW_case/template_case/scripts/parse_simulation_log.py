@@ -66,6 +66,20 @@ def get_sim_parameters(case_dir: Path) -> tuple[float, float, float, float]:
     return p_laser, v_scan, d_laser, t_powder
 
 def get_experimental_metrics(case_dir: Path) -> tuple[float, float]:
+    build_json = case_dir / "case_build.json"
+    if build_json.exists():
+        try:
+            import json
+            with open(build_json, "r") as f:
+                data = json.load(f)
+            case_data = data.get("case", {})
+            w = case_data.get("exp_width_um")
+            d = case_data.get("exp_depth_um")
+            if w is not None and d is not None:
+                return float(w), float(d)
+        except Exception:
+            pass
+
     exp_csv = Path("/home/kanak/drives/d-drive/work/research/connor_project/papers/2026_Hofmann_Meltpool_data_316L/MeltpoolGeometryData.csv")
     if not exp_csv.exists():
         return EXP_WIDTH_DEFAULT, EXP_DEPTH_DEFAULT

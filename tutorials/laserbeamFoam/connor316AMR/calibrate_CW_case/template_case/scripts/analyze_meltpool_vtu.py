@@ -25,8 +25,20 @@ NX, NZ, NY = 180, 180, 180
 INTERP_METHOD = "linear"
 SURFACE_Y_UM = 300
 PDF_DPI = 150
-EXP_SUMMARY_CSV = Path(__file__).resolve().parents[2] / "exp_figure" / "exp_weld12_earth_summary.csv"
-EXP_MASK_IMAGE = Path(__file__).resolve().parents[2] / "exp_figure" / "exp_weld12_earth_mask.png"
+def find_exp_figure_dir() -> Path:
+    curr = Path(__file__).resolve().parent
+    for _ in range(10):
+        candidate = curr / "exp_figure"
+        if candidate.is_dir():
+            return candidate
+        if curr.parent == curr:
+            break
+        curr = curr.parent
+    return Path(__file__).resolve().parents[2] / "exp_figure"
+
+EXP_DIR = find_exp_figure_dir()
+EXP_SUMMARY_CSV = EXP_DIR / "exp_weld12_earth_summary.csv"
+EXP_MASK_IMAGE = EXP_DIR / "exp_weld12_earth_mask.png"
 
 
 CSV_FIELDS = [

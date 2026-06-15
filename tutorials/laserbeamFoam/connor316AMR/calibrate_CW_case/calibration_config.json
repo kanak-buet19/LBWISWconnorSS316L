@@ -1,8 +1,8 @@
 {
-  "_comment": "CW single-track 316L calibration. Thermophysical params calibrated ONCE, shared across both cases; only process params (P, v, radius) and geometry differ per case. Edit ranges/budget here.",
+  "_comment": "CW single-track 316L calibration. Thermophysical params calibrated ONCE, shared across ALL cases; only process params (P, v, radius) and geometry differ per case. Edit ranges/budget here.",
 
   "objective": {
-    "_comment": "Per case: error = mean(|depth_err|, |width_err|). Candidate objective = mean over both cases. Lower is better.",
+    "_comment": "Per case: error = mean(|depth_err|, |width_err|). Candidate objective = mean over all cases. Lower is better.",
     "metric": "mean_abs_rel_error",
     "depth_weight": 1.0,
     "width_weight": 1.0
@@ -10,31 +10,38 @@
 
   "optimizer": {
     "method": "lhs",
-    "nSamples": 16,
+    "nSamples": 32,
     "seed": 42,
     "includeBaseline": true,
-    "_comment": "16 candidates total (baseline + 15 LHS). Each candidate runs BOTH cases."
+    "_comment": "32 candidates total (baseline + 31 LHS). Each candidate runs ALL 3 cases. 12 free params -> 32 samples is a reasonable screening budget."
   },
 
   "parameters": {
-    "_comment": "Shared thermophysical knobs. elec_resistivity scalar; cp/kappa are multiplicative scales on the whole table; rho scalar; beta_r scalar.",
-    "elec_resistivity": {"type": "scalar", "baseline": 7.0e-7, "min": 5.6e-7, "max": 8.4e-7},
-    "cp_scale":         {"type": "scale",  "baseline": 1.0,     "min": 0.90,   "max": 1.10},
-    "kappa_scale":      {"type": "scale",  "baseline": 1.0,     "min": 0.90,   "max": 1.10},
-    "rho":              {"type": "scalar", "baseline": 7950.0,  "min": 7155.0, "max": 8745.0},
-    "beta_r":           {"type": "scalar", "baseline": 0.08,    "min": 0.072,  "max": 0.088}
+    "_comment": "Shared 316L thermophysical knobs. Ranges stay within published literature bounds. cp_scale/kappa_scale are multiplicative on the SOLID table; liquid slope is additive dX/dT for T>=Tliquidus. Marangoni_Constant is negative (dσ/dT).",
+    "elec_resistivity":   {"type": "scalar", "baseline": 7.0e-7,  "min": 5.0e-7,  "max": 9.0e-7,   "_units": "ohm·m"},
+    "cp_scale":           {"type": "scale",  "baseline": 1.0,     "min": 0.88,    "max": 1.12,     "_units": "-"},
+    "kappa_scale":        {"type": "scale",  "baseline": 1.0,     "min": 0.88,    "max": 1.12,     "_units": "-"},
+    "rho":                {"type": "scalar", "baseline": 7950.0,  "min": 7155.0,  "max": 8745.0,   "_units": "kg/m3"},
+    "beta_r":             {"type": "scalar", "baseline": 0.08,    "min": 0.064,   "max": 0.096,    "_units": "-"},
+    "nu":                 {"type": "scalar", "baseline": 7e-7,    "min": 4.9e-7,  "max": 9.1e-7,   "_units": "m2/s"},
+    "LatentHeat":         {"type": "scalar", "baseline": 260e3,   "min": 220e3,   "max": 300e3,    "_units": "J/kg"},
+    "LatentHeatVap":      {"type": "scalar", "baseline": 6.33e6,  "min": 5.5e6,   "max": 7.2e6,    "_units": "J/kg"},
+    "sigma":              {"type": "scalar", "baseline": 1.87,    "min": 1.5,     "max": 2.1,      "_units": "N/m"},
+    "Marangoni_Constant": {"type": "scalar", "baseline": -4.9e-4, "min": -8.0e-4, "max": -2.0e-4,  "_units": "N/m/K"},
+    "kappa_liquid_slope": {"type": "slope",  "baseline": 0.0,     "min": -0.006,  "max": 0.010,    "_units": "W/m/K/K, additive dkappa/dT for T>=Tliquidus, capped at Tvap"},
+    "cp_liquid_slope":    {"type": "slope",  "baseline": 0.0,     "min": -0.09,   "max": 0.15,     "_units": "J/kg/K/K, additive dcp/dT for T>=Tliquidus, capped at Tvap"}
   },
 
   "geometry": {
     "_comment": "Common geometry constants in metres. Per-case y/z extents computed from these + process/target.",
-    "base_cell": 32e-6,
-    "gas_thickness": 128e-6,
+    "base_cell": 20e-6,
+    "gas_thickness": 140e-6,
     "x_extent": 512e-6,
     "lead_in": 230e-6,
     "tail": 180e-6,
     "substrate_depth_factor": 2.5,
     "substrate_min": 224e-6,
-    "surface_y_um": 128.0
+    "surface_y_um": 140.0
   },
 
   "control": {
@@ -66,6 +73,16 @@
       "exp_width_um": 131.10,
       "exp_depth_um": 163.80,
       "_exp_rows": "Hofmann row 652 (w131.1 d163.8)"
+    },
+    {
+      "name": "case_P200_v900_r40",
+      "P_laser_W": 200,
+      "v_scan_mm_s": 900,
+      "d_laser_mm": 0.08,
+      "laserRadius_m": 40e-6,
+      "exp_width_um": 111.52,
+      "exp_depth_um": 57.79,
+      "_exp_rows": "Hofmann row 111 (P200 v900 d0.08 t_powder=0 balling=0)"
     }
   ],
 
@@ -75,13 +92,13 @@
     "stabilityTol": 0.10,
     "minPoints": 2,
     "skipSecondCaseIfFirstBad": true,
-    "_comment": "Abort a running sim only once its melt-pool has STABILIZED (rel change of last two points < stabilityTol) AND error > 50% — avoids killing pools that are still growing. If a candidate's first case ends > 50% off, its second case is skipped."
+    "_comment": "Abort once melt-pool STABILIZED (rel change last two points < stabilityTol) AND error > 50%. If case1 > 50% off, skip remaining cases for that candidate."
   },
 
   "execution": {
-    "coresPerSim": 4,
-    "totalCores": 16,
-    "_comment": "maxParallel = floor(totalCores / coresPerSim). Override with env CALIB_TOTAL_CORES / CALIB_CORES_PER_SIM (HPC sets these). of2506 apptainer wrapper + host PYTHON taken from env OF2506_IMAGE / OF2506_USER / PYTHON (same as job.sh).",
+    "coresPerSim": 8,
+    "totalCores": 64,
+    "_comment": "maxParallel = floor(totalCores / coresPerSim) = 8 parallel sims. Override with env CALIB_TOTAL_CORES / CALIB_CORES_PER_SIM (HPC sets these via job_calibration.sh).",
     "pollIntervalSec": 10,
     "perSimTimeoutSec": 14400
   }

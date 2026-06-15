@@ -2,7 +2,7 @@
 #SBATCH --job-name=cwCalib
 #SBATCH --time=12:00:00
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=16
+#SBATCH --ntasks-per-node=64
 #SBATCH --account=mch250110
 #SBATCH --output=calib_%j.out
 #SBATCH --error=calib_%j.err
@@ -52,8 +52,8 @@ export MPLCONFIGDIR="$caseDir/.mplconfig"
 mkdir -p "$MPLCONFIGDIR"
 
 # --- swarm sizing (dynamic) ---
-export CALIB_TOTAL_CORES="${CALIB_TOTAL_CORES:-${SLURM_NTASKS:-16}}"
-export CALIB_CORES_PER_SIM="${CALIB_CORES_PER_SIM:-4}"
+export CALIB_TOTAL_CORES="${CALIB_TOTAL_CORES:-${SLURM_NTASKS:-64}}"
+export CALIB_CORES_PER_SIM="${CALIB_CORES_PER_SIM:-8}"
 echo "CALIB_TOTAL_CORES   = $CALIB_TOTAL_CORES"
 echo "CALIB_CORES_PER_SIM = $CALIB_CORES_PER_SIM"
 echo "parallel sims       = $(( CALIB_TOTAL_CORES / CALIB_CORES_PER_SIM ))"
@@ -64,7 +64,7 @@ command -v apptainer
 test -f "$OF2506_IMAGE"
 "$PYTHON" - <<'PY'
 import importlib, sys
-req = ["matplotlib", "numpy", "pandas", "pyvista", "scipy", "vtk"]
+req = ["matplotlib", "numpy", "pandas", "pyvista", "scipy", "tqdm", "vtk"]
 miss = []
 for m in req:
     try:
