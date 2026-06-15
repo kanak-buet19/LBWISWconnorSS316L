@@ -47,7 +47,7 @@ echo "============================================="
 
 # Run from the directory where this script lives.
 if [ -n "${SLURM_SUBMIT_DIR:-}" ]; then
-    cd "$SLURM_SUBMIT_DIR/benchmark"
+    cd "$SLURM_SUBMIT_DIR"
 fi
 caseDir="$(pwd)"
 
