@@ -1,0 +1,115 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      transportProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Zhang et al. (2024), Table 2 — 316L SS thermophysical properties.
+// Source: DOI 10.3390/mi15020170
+
+// Interface tracking method: isoAdvector or MULES
+interfaceTrackingScheme MULES;
+
+phases          (metal gas);
+
+metal
+{
+    transportModel  Newtonian;
+    nu              7.55e-7;        // mu/rho = 0.006/7950 [m2/s]
+
+    rho             7950;           // Solid density [kg/m3] (Zhang rho_s = 7950)
+
+    Tsolidus        1658;           // Solidus temperature [K]
+    Tliquidus       1723;           // Liquidus temperature [K]
+    LatentHeat      2.6e5;          // Latent heat of fusion [J/kg] (Zhang L_m)
+    beta            1.0e-4;         // Thermal expansion coeff [1/K] (from rho_l=8200-0.77T: beta=0.77/7950)
+
+    // Thermal conductivity [W/m/K]: solid k_s=9.23+0.0139T, liquid k_l=5.5+0.0133T
+    // Discontinuity at solidus/liquidus (drop on melting) matches real 316L behavior.
+    // Above T_vap (3090 K): extrapolated via k_l formula.
+    table_kappa
+    (
+        (300    13.40)
+        (500    16.18)
+        (800    20.35)
+        (1200   25.91)
+        (1658   32.26)
+        (1723   28.42)
+        (2000   32.10)
+        (2500   38.75)
+        (3090   46.60)
+        (4000   58.70)
+        (5000   72.00)
+    );
+
+    // Specific heat [J/kg/K]: solid Cp_s=415+0.1838T, liquid Cp_l=830 (constant)
+    // Above T_vap (3090 K): Cp_l = 830 maintained.
+    table_cp
+    (
+        (300    470.1)
+        (500    506.9)
+        (800    562.0)
+        (1200   635.6)
+        (1658   719.7)
+        (1723   830.0)
+        (2000   830.0)
+        (2500   830.0)
+        (3090   830.0)
+        (4000   830.0)
+        (5000   830.0)
+    );
+
+    elec_resistivity    1.0e-6;     // [ohm m] — needs calibration to match Zhang alpha_laser=0.5
+}
+
+gas
+{
+    transportModel  Newtonian;
+
+    nu              1.516e-5;       // mu_g/rho_g = 1.85e-5/1.22 [m2/s]
+
+    rho             1.22;           // [kg/m3] (Zhang rho_g = 1.22)
+
+    poly_kappa   (0.02 0 0 0 0 0 0 0);     // k_g = 0.02 W/m/K (constant)
+    poly_cp      (1006.43 0 0 0 0 0 0 0);  // Cp_g = 1006.43 J/kg/K (constant)
+
+    Tsolidus    1.0;
+    Tliquidus   10.0;
+    LatentHeat  1;
+    beta        4.0e-5;
+}
+
+emS                     0.5;        // Solid emissivity (Zhang epsilon = 0.5)
+emL                     0.5;        // Liquid emissivity (Zhang epsilon = 0.5)
+TRef                    300;        // Radiation reference temperature [K]
+T_ambient               300;        // Ambient temperature [K]
+h_convection            0;          // Convective HTC [W/m2/K]
+
+sigma               1.75;           // Surface tension at liquidus [N/m] (Zhang Fig. 2 approx.)
+Marangoni_Constant  -5.0e-4;        // dsigma/dT [N/m/K] (linear approx from Zhang Fig. 2: ~-5e-4)
+
+p0              101325.0;           // Atmospheric pressure [Pa]
+p_amb           101325.0;           // Chamber pressure = atmospheric (Argon at 1 atm)
+beta_r          0.08;                // Recoil pressure coeff (Zhang A_recoil = 0.6)
+Tvap            3090;               // Vaporization temp at p_amb [K] (Zhang T_v at 1 atm)
+Tvap_atm        3090;               // Vaporization temp at p0 [K]
+recoilPressureModel modifiedReducedPressure;  // Matches Zhang F_recoil = A_recoil*P0*exp(...)
+recoilTransitionWidth   100;        // Smooth recoil activation width [K]
+Mm              0.05593;            // Molar mass [kg/mol] (Zhang M = 0.05593)
+LatentHeatVap   7.45e6;             // Latent heat of vaporization [J/kg] (Zhang L_v)
+
+V_scan          0.52;               // Scan speed for N01 [m/s]
+scanDirection   (0 0 1);            // Scan in +Z direction
+
+
+// ************************************************************************* //
