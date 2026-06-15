@@ -129,6 +129,27 @@
            *pos(dimensionedScalar("alphaMax", dimless, 0.999) - alpha_smoothed)
            *pos(magGradT - gradTrefine);
     }
+    else if (amrCriterion == "interfaceOnly")
+    {
+        // Refine entire alpha interface (0 < alpha < 1) plus 1 adjacent cell layer on each side
+        volScalarField baseIndicator
+        (
+            pos(alpha_smoothed - dimensionedScalar("alphaMin", dimless, 0.001))
+           *pos(dimensionedScalar("alphaMax", dimless, 0.999) - alpha_smoothed)
+        );
+
+        // Dilate by 1 layer: face-average spreads indicator to immediate neighbors
+        volScalarField neighborIndicator
+        (
+            pos
+            (
+                fvc::average(fvc::interpolate(baseIndicator))
+              - dimensionedScalar("dilateThresh", dimless, SMALL)
+            )
+        );
+
+        meshRefinementIndicator = max(baseIndicator, neighborIndicator);
+    }
     else if (amrCriterion == "interfaceT100")
     {
         meshRefinementIndicator =

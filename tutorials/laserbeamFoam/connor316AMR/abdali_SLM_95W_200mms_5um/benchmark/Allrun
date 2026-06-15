@@ -1,14 +1,20 @@
 #!/bin/bash
 # Wrapper to source OpenFOAM environment and run the python benchmark script
 
-# Source OpenFOAM 2412 environment (disable set -e temporarily as etc/bashrc can return non-zero)
-if [ -f /usr/lib/openfoam/openfoam2412/etc/bashrc ]; then
-    set +e
-    source /usr/lib/openfoam/openfoam2412/etc/bashrc
-    set -e
-else
-    echo "ERROR: OpenFOAM 2412 bashrc not found. Please ensure OpenFOAM 2412 is installed."
-    exit 1
+# Source OpenFOAM environment if command blockMesh is not already on PATH
+if ! command -v blockMesh &> /dev/null; then
+    if [ -f /usr/lib/openfoam/openfoam2412/etc/bashrc ]; then
+        set +e
+        source /usr/lib/openfoam/openfoam2412/etc/bashrc
+        set -e
+    elif [ -f /openfoam/bash.rc ]; then
+        set +e
+        source /openfoam/bash.rc
+        set -e
+    else
+        echo "ERROR: OpenFOAM commands not found on PATH and no bashrc found to source."
+        exit 1
+    fi
 fi
 
 # Run the benchmark orchestrator script

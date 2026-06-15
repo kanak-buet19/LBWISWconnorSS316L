@@ -1075,3 +1075,70 @@ mesh.setFluxRequired(alpha1.name());
 
 #include "isoAdvector/createPorosity.H"
 isoAdvection advector(alpha1, phi, U);
+
+// --- Solidification parameters and fields ---
+Info<< "Reading transportProperties for V_scan and scanDirection..." << endl;
+const dimensionedScalar V_scan
+(
+    "V_scan",
+    dimVelocity,
+    transportProperties.lookupOrDefault<scalar>("V_scan", 0.0)
+);
+
+
+Info<< "Declaring solidification fields..." << endl;
+volScalarField G
+(
+    IOobject
+    (
+        "G",
+        runTime.timeName(),
+        mesh,
+        IOobject::NO_READ,
+        IOobject::AUTO_WRITE
+    ),
+    mesh,
+    dimensionedScalar("G", dimensionSet(0, -1, 0, 1, 0), 0.0)
+);
+
+volScalarField R_solid
+(
+    IOobject
+    (
+        "R_solid",
+        runTime.timeName(),
+        mesh,
+        IOobject::NO_READ,
+        IOobject::AUTO_WRITE
+    ),
+    mesh,
+    dimensionedScalar("R_solid", dimVelocity, 0.0)
+);
+
+volScalarField CR_spatial
+(
+    IOobject
+    (
+        "CR_spatial",
+        runTime.timeName(),
+        mesh,
+        IOobject::NO_READ,
+        IOobject::AUTO_WRITE
+    ),
+    mesh,
+    dimensionedScalar("CR_spatial", dimensionSet(0, 0, -1, 1, 0), 0.0)
+);
+
+volScalarField CR_temporal
+(
+    IOobject
+    (
+        "CR_temporal",
+        runTime.timeName(),
+        mesh,
+        IOobject::NO_READ,
+        IOobject::AUTO_WRITE
+    ),
+    mesh,
+    dimensionedScalar("CR_temporal", dimensionSet(0, 0, -1, 1, 0), 0.0)
+);
