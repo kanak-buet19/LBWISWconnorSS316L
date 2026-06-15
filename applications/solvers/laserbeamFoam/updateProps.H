@@ -114,7 +114,22 @@
         dynamicMeshDict.lookupOrDefault<word>("amrCriterion", "interfaceT300")
     );
 
-    if (amrCriterion == "interfaceT100")
+    if (amrCriterion == "interfaceGradT")
+    {
+        const dimensionedScalar gradTrefine
+        (
+            "gradTrefine",
+            dimensionSet(0, -1, 0, 1, 0, 0, 0),
+            dynamicMeshDict.lookupOrDefault<scalar>("gradTrefine", 5e6)
+        );
+
+        volScalarField magGradT(mag(fvc::grad(T)));
+        meshRefinementIndicator =
+            pos(alpha_smoothed - dimensionedScalar("alphaMin", dimless, 0.001))
+           *pos(dimensionedScalar("alphaMax", dimless, 0.999) - alpha_smoothed)
+           *pos(magGradT - gradTrefine);
+    }
+    else if (amrCriterion == "interfaceT100")
     {
         meshRefinementIndicator =
             pos(alpha_smoothed - dimensionedScalar("alphaMin", dimless, 0.001))

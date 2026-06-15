@@ -56,6 +56,9 @@ postProcessQueueWorker()
             break
         fi
 
+        # Sleep to prevent race condition where reconstructParMesh runs
+        # before the solver finishes writing all files to disk
+        sleep 2
         postProcessWrittenTime "$queuedTime"
     done < "$queueFile"
 }

@@ -1,0 +1,101 @@
+"""Melt-pool stability + error evaluation for calibration.
+
+Reads `<case>/post-processing-data/vtu_meltpool_geometry.csv` (written live by
+analyze_meltpool_vtu.py during the run) and reduces the time series of
+meltPoolDepth_um / meltPoolWidth_um to a single 'stable' value, then computes
+relative error vs the experimental target.
+"""
+
+from __future__ import annotations
+
+import csv
+import math
+from pathlib import Path
+
+CSV_REL = "post-processing-data/vtu_meltpool_geometry.csv"
+
+
+def _finite(x: str | float) -> float | None:
+    try:
+        v = float(x)
+    except (TypeError, ValueError):
+        return None
+    return v if math.isfinite(v) else None
+
+
+def read_series(case_dir: Path) -> list[dict]:
+    """Return [{time, depth, width}, ...] for rows with finite depth AND width."""
+    csv_path = Path(case_dir) / CSV_REL
+    if not csv_path.exists():
+        return []
+    rows = []
+    with csv_path.open(newline="") as fh:
+        for r in csv.DictReader(fh):
+            t = _finite(r.get("time"))
+            d = _finite(r.get("meltPoolDepth_um"))
+            w = _finite(r.get("meltPoolWidth_um"))
+            if t is not None and d is not None and w is not None:
+                rows.append({"time": t, "depth": d, "width": w})
+    rows.sort(key=lambda x: x["time"])
+    return rows
+
+
+def _stable(values: list[float], tol: float) -> tuple[float, bool]:
+    """Stable estimate of a series tail. Returns (value, converged)."""
+    if not values:
+        return float("nan"), False
+    if len(values) == 1:
+        return values[-1], False
+    a, b = values[-2], values[-1]
+    rel = abs(b - a) / abs(b) if b else float("inf")
+    converged = rel < tol
+    value = (a + b) / 2.0 if converged else b
+    return value, converged
+
+
+def evaluate(case_dir: Path, exp_depth_um: float, exp_width_um: float,
+             stability_tol: float = 0.10) -> dict:
+    series = read_series(case_dir)
+    n = len(series)
+    depths = [r["depth"] for r in series]
+    widths = [r["width"] for r in series]
+
+    depth, d_conv = _stable(depths, stability_tol)
+    width, w_conv = _stable(widths, stability_tol)
+
+    def rel(sim, exp):
+        return float("nan") if not exp else (sim - exp) / exp
+
+    depth_err = rel(depth, exp_depth_um)
+    width_err = rel(width, exp_width_um)
+    errs = [abs(e) for e in (depth_err, width_err) if e == e]  # drop nan
+    case_error = sum(errs) / len(errs) if errs else float("nan")
+
+    return {
+        "n_points": n,
+        "sim_depth_um": depth, "sim_width_um": width,
+        "exp_depth_um": exp_depth_um, "exp_width_um": exp_width_um,
+        "depth_err": depth_err, "width_err": width_err,
+        "depth_converged": d_conv, "width_converged": w_conv,
+        "converged": d_conv and w_conv,
+        "case_error": case_error,
+        "series": series,
+    }
+
+
+def should_abort(case_dir: Path, exp_depth_um: float, exp_width_um: float,
+                 error_threshold: float, stability_tol: float,
+                 min_points: int) -> tuple[bool, str]:
+    """Abort only when the pool has STABILIZED but is still > threshold off."""
+    ev = evaluate(case_dir, exp_depth_um, exp_width_um, stability_tol)
+    if ev["n_points"] < max(min_points, 2):
+        return False, ""
+    if not ev["converged"]:
+        return False, ""
+    worst = max((abs(e) for e in (ev["depth_err"], ev["width_err"]) if e == e),
+                default=0.0)
+    if worst > error_threshold:
+        return True, (f"stabilized but error {worst*100:.0f}% > "
+                      f"{error_threshold*100:.0f}% "
+                      f"(d={ev['sim_depth_um']:.1f} w={ev['sim_width_um']:.1f})")
+    return False, ""

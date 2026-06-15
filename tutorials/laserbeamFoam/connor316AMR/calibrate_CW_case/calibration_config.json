@@ -1,0 +1,88 @@
+{
+  "_comment": "CW single-track 316L calibration. Thermophysical params calibrated ONCE, shared across both cases; only process params (P, v, radius) and geometry differ per case. Edit ranges/budget here.",
+
+  "objective": {
+    "_comment": "Per case: error = mean(|depth_err|, |width_err|). Candidate objective = mean over both cases. Lower is better.",
+    "metric": "mean_abs_rel_error",
+    "depth_weight": 1.0,
+    "width_weight": 1.0
+  },
+
+  "optimizer": {
+    "method": "lhs",
+    "nSamples": 16,
+    "seed": 42,
+    "includeBaseline": true,
+    "_comment": "16 candidates total (baseline + 15 LHS). Each candidate runs BOTH cases."
+  },
+
+  "parameters": {
+    "_comment": "Shared thermophysical knobs. elec_resistivity scalar; cp/kappa are multiplicative scales on the whole table; rho scalar; beta_r scalar.",
+    "elec_resistivity": {"type": "scalar", "baseline": 7.0e-7, "min": 5.6e-7, "max": 8.4e-7},
+    "cp_scale":         {"type": "scale",  "baseline": 1.0,     "min": 0.90,   "max": 1.10},
+    "kappa_scale":      {"type": "scale",  "baseline": 1.0,     "min": 0.90,   "max": 1.10},
+    "rho":              {"type": "scalar", "baseline": 7950.0,  "min": 7155.0, "max": 8745.0},
+    "beta_r":           {"type": "scalar", "baseline": 0.08,    "min": 0.072,  "max": 0.088}
+  },
+
+  "geometry": {
+    "_comment": "Common geometry constants in metres. Per-case y/z extents computed from these + process/target.",
+    "base_cell": 32e-6,
+    "gas_thickness": 128e-6,
+    "x_extent": 512e-6,
+    "lead_in": 230e-6,
+    "tail": 180e-6,
+    "substrate_depth_factor": 2.5,
+    "substrate_min": 224e-6,
+    "surface_y_um": 128.0
+  },
+
+  "control": {
+    "endTime": 0.25e-3,
+    "writeInterval": 5e-5,
+    "deltaT": 1e-7,
+    "maxDeltaT": 1e-6,
+    "maxCo": 0.35,
+    "maxAlphaCo": 0.35
+  },
+
+  "cases": [
+    {
+      "name": "case_P200_v900",
+      "P_laser_W": 200,
+      "v_scan_mm_s": 900,
+      "d_laser_mm": 0.05,
+      "laserRadius_m": 25e-6,
+      "exp_width_um": 114.60,
+      "exp_depth_um": 93.95,
+      "_exp_rows": "Hofmann rows 332 (w117.0 d91.8) + 484 (w112.21 d96.11), mean"
+    },
+    {
+      "name": "case_P200_v600",
+      "P_laser_W": 200,
+      "v_scan_mm_s": 600,
+      "d_laser_mm": 0.05,
+      "laserRadius_m": 25e-6,
+      "exp_width_um": 131.10,
+      "exp_depth_um": 163.80,
+      "_exp_rows": "Hofmann row 652 (w131.1 d163.8)"
+    }
+  ],
+
+  "earlyAbort": {
+    "enabled": true,
+    "errorThreshold": 0.50,
+    "stabilityTol": 0.10,
+    "minPoints": 2,
+    "skipSecondCaseIfFirstBad": true,
+    "_comment": "Abort a running sim only once its melt-pool has STABILIZED (rel change of last two points < stabilityTol) AND error > 50% — avoids killing pools that are still growing. If a candidate's first case ends > 50% off, its second case is skipped."
+  },
+
+  "execution": {
+    "coresPerSim": 4,
+    "totalCores": 16,
+    "_comment": "maxParallel = floor(totalCores / coresPerSim). Override with env CALIB_TOTAL_CORES / CALIB_CORES_PER_SIM (HPC sets these). of2506 apptainer wrapper + host PYTHON taken from env OF2506_IMAGE / OF2506_USER / PYTHON (same as job.sh).",
+    "pollIntervalSec": 10,
+    "perSimTimeoutSec": 14400
+  }
+}

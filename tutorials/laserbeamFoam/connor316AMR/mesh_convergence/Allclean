@@ -1,0 +1,42 @@
+#!/bin/bash
+# Clean all mesh convergence cases and comparison results.
+# Usage:
+#   ./Allclean            — clean all cases
+#   ./Allclean mesh_8um   — clean only the specified case
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
+
+CASES=(mesh_4um mesh_6um mesh_8um)
+
+clean_case()
+{
+    local caseName="$1"
+    if [ ! -d "$caseName" ]; then
+        echo "[WARN] Case directory not found: $caseName — skipping."
+        return
+    fi
+    echo "Cleaning $caseName ..."
+    (
+        cd "$caseName"
+        . "$WM_PROJECT_DIR/bin/tools/CleanFunctions"
+        cleanCase
+        rm -rf 0 VTK VTKs post-processing-data absorptivity_vs_time log.*
+    )
+    echo "[DONE] $caseName cleaned."
+}
+
+if [ $# -gt 0 ]; then
+    for arg in "$@"; do
+        clean_case "$arg"
+    done
+else
+    for caseName in "${CASES[@]}"; do
+        clean_case "$caseName"
+    done
+    echo "Cleaning comparison results ..."
+    rm -rf results
+    echo "[DONE] All cleaned."
+fi

@@ -16,7 +16,8 @@ FoamFile
 
 dynamicFvMesh   dynamicRefineFvMesh;
 
-amrCriterion    interfaceT300;
+amrCriterion    interfaceGradT;
+gradTrefine     5e6;
 
 // How often to refine
 refineInterval  20;
@@ -45,7 +46,7 @@ maxCells        1000000;
 // on surfaceScalarFields that do not need to be reinterpolated.
 correctFluxes
 (
-    (phi none)
+    (phi U)
     (nHatf none)
     (rhoPhi none)
     (alphaPhi0.metal none)

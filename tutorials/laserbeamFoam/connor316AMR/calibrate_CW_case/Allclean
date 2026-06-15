@@ -1,0 +1,12 @@
+#!/bin/bash
+#
+# Clean all generated calibration data (runs + results). Keeps template_case,
+# scripts, config.
+#
+caseDir="$(cd "$(dirname "$0")" && pwd)"
+cd "$caseDir"
+
+echo "Removing runs/ and results/ ..."
+rm -rf runs results .mplconfig
+rm -rf scripts/__pycache__
+echo "Done. template_case/, scripts/, calibration_config.json kept."

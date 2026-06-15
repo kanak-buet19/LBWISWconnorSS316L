@@ -1,0 +1,191 @@
+#!/bin/bash
+
+set -e
+set -o pipefail
+
+## Notes:
+# has dynamic meshing; 8 core job
+# In future could also test with `blastAMR`
+
+# User options:
+bParallel=true # Only set to false for debugging purposes.
+convertVTK=true # Convert written times to VTK during the solver run.
+analyzeMeltpool=true # Analyze each newly converted VTU during the solver run.
+pythonExe="${PYTHON:-/home/kanak/.venv/venv314/bin/python}"
+
+latestInternalVTU()
+{
+    find VTK -path "*/internal.vtu" -type f -printf '%T@ %p\n' 2>/dev/null \
+        | sort -g \
+        | tail -1 \
+        | cut -d' ' -f2-
+}
+
+postProcessWrittenTime()
+{
+    local timeName="$1"
+    local vtkFile=""
+
+    echo "[DEBUG] Post-processing output time step ${timeName}..."
+    if ! ./foamVTK.sh "$timeName"; then
+        echo "[ERROR] foamVTK.sh failed for time step ${timeName}! Terminating simulation." >&4
+        kill 0
+        exit 1
+    fi
+
+    if ${analyzeMeltpool}; then
+        vtkFile="$(latestInternalVTU)"
+
+        if [ -z "$vtkFile" ]; then
+            echo "[ERROR] No internal.vtu found after converting time step ${timeName}! Terminating simulation." >&4
+            kill 0
+            exit 1
+        fi
+
+        echo "[DEBUG] Running meltpool analysis on ${vtkFile}..."
+        MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp}" "$pythonExe" \
+            scripts/analyze_meltpool_vtu.py \
+            --vtk-file "$vtkFile" \
+            --surface-y-um 96 \
+            || { echo "[ERROR] Meltpool analysis failed for ${vtkFile}! Terminating simulation." >&4; kill 0; exit 1; }
+        echo "[DEBUG] Meltpool analysis completed successfully for ${vtkFile}."
+    fi
+}
+
+postProcessQueueWorker()
+{
+    local queueFile="$1"
+    local queuedTime=""
+
+    while IFS= read -r queuedTime
+    do
+        if [ "$queuedTime" = "__DONE__" ]; then
+            break
+        fi
+
+        # Sleep to prevent race condition where reconstructParMesh runs
+        # before the solver finishes writing all files to disk
+        sleep 2
+        postProcessWrittenTime "$queuedTime"
+    done < "$queueFile"
+}
+
+convertOnWrite()
+{
+    local currentTime=""
+    local lastProcessedTime=""
+    local queueFile=""
+    local workerPid=""
+
+    queueFile="$(mktemp -u ".postProcessQueue.XXXXXX")"
+    mkfifo "$queueFile"
+    exec 4>&2
+    postProcessQueueWorker "$queueFile" >> log.postProcess 2>&1 &
+    workerPid="$!"
+    exec 3>"$queueFile"
+    rm -f "$queueFile"
+
+    while IFS= read -r line
+    do
+        echo "$line"
+
+        case "$line" in
+            "Time = "*)
+                currentTime="${line#Time = }"
+                ;;
+            "Writing "*|"Writing data at time "*)
+                if [ -n "$currentTime" ] && [ "$currentTime" != "$lastProcessedTime" ]; then
+                    echo "Queueing VTK conversion for time ${currentTime}"
+                    printf '%s\n' "$currentTime" >&3
+                    lastProcessedTime="$currentTime"
+                fi
+                ;;
+        esac
+    done
+
+    printf '%s\n' "__DONE__" >&3
+    exec 3>&-
+    wait "$workerPid"
+    exec 4>&-
+}
+
+
+# Source tutorial run functions
+. $WM_PROJECT_DIR/bin/tools/RunFunctions
+
+# Check if case can be resumed
+bResume=false
+if ${bParallel}; then
+    if [ -d processor0 ] && ls -d processor0/[0-9]* 2>/dev/null | grep -q -v "/0$"; then
+        bResume=true
+    fi
+else
+    if ls -d [0-9]* 2>/dev/null | grep -q -v "^0$"; then
+        bResume=true
+    fi
+fi
+
+if ${bResume}; then
+    echo "[DEBUG] Found existing time directories. Resuming simulation..."
+    if [ ! -d constant/polyMesh ]; then
+        echo "[DEBUG] Base mesh constant/polyMesh is missing. Re-running blockMesh..."
+        blockMesh >> log.blockMesh 2>&1 || { echo "[ERROR] blockMesh failed during resume! Exiting."; exit 1; }
+        echo "[DEBUG] blockMesh completed successfully."
+    fi
+else
+    echo "[DEBUG] Cleaning old post-processing logs..."
+    rm -f log.postProcess
+    echo "[DEBUG] Copying 'initial' to 0..."
+    cp -r initial 0 || { echo "[ERROR] Failed to copy initial to 0. Exiting."; exit 1; }
+
+    # remove `.orig` extensions where applicable
+    find 0 -name "*.orig" -exec bash -c 'cp "$0" "${0%.orig}"' {} \;
+
+    echo "[DEBUG] Running blockMesh..."
+    blockMesh >> log.blockMesh 2>&1 || { echo "[ERROR] blockMesh failed! Exiting."; exit 1; }
+    echo "[DEBUG] blockMesh completed successfully."
+
+    echo "[DEBUG] Running setFields..."
+    setFields >> log.setFields 2>&1 || { echo "[ERROR] setFields failed! Exiting."; exit 1; }
+    echo "[DEBUG] setFields completed successfully."
+fi
+
+appendFlag=""
+if ${bResume}; then
+    appendFlag="--append"
+fi
+
+if ${bParallel}; then
+    if ! ${bResume}; then
+        echo "[DEBUG] Decomposing mesh using decomposePar..."
+        decomposePar > log.decomposePar 2>&1 || { echo "[ERROR] decomposePar failed! Exiting."; exit 1; }
+        echo "[DEBUG] Decomposing mesh completed successfully."
+    fi
+
+    nCores=$(\
+        foamDictionary -entry numberOfSubdomains \
+                       -value system/decomposeParDict)
+
+    echo "[DEBUG] Starting laserbeamFoam in parallel on $nCores cores..."
+    if ${convertVTK}; then
+        mpirun --oversubscribe -np $nCores \
+            laserbeamFoam \
+            -parallel \
+            2>&1 | convertOnWrite | "$pythonExe" scripts/parse_simulation_log.py ${appendFlag} || { echo "[ERROR] Parallel simulation failed! Exiting."; exit 1; }
+    else
+        mpirun --oversubscribe -np $nCores \
+            laserbeamFoam \
+            -parallel \
+            2>&1 | "$pythonExe" scripts/parse_simulation_log.py ${appendFlag} || { echo "[ERROR] Parallel simulation failed! Exiting."; exit 1; }
+    fi
+else
+    echo "[DEBUG] Starting laserbeamFoam in single-processor mode..."
+    if ${convertVTK}; then
+        laserbeamFoam 2>&1 | convertOnWrite | "$pythonExe" scripts/parse_simulation_log.py ${appendFlag} || { echo "[ERROR] Simulation failed! Exiting."; exit 1; }
+    else
+        laserbeamFoam 2>&1 | "$pythonExe" scripts/parse_simulation_log.py ${appendFlag} || { echo "[ERROR] Simulation failed! Exiting."; exit 1; }
+    fi
+fi
+echo "[DEBUG] Simulation completed successfully."
+
+touch cunninghamValidation.foam

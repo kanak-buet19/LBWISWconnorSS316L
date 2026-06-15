@@ -1,0 +1,8 @@
+#!/bin/bash
+
+set -e
+
+caseDir="$(cd "$(dirname "$0")" && pwd)"
+cd "$caseDir"
+
+exec ./Allrun_long "$@"
