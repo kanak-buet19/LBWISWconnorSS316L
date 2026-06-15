@@ -1,0 +1,54 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  6
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      PhaseFieldProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Zhang et al. (2024) — 316L bare plate, N01: 260 W / 0.52 m/s (keyhole mode)
+// Aconity MIDI, single-mode fiber, spot radius=50 um, Argon atmosphere.
+// CW laser (not pulsed).
+
+timeVsLaserPosition
+{
+    file    "$FOAM_CASE/constant/timeVsLaserPosition";
+    outOfBounds clamp;
+}
+
+timeVsLaserPower
+{
+    file    "$FOAM_CASE/constant/timeVsLaserPower";
+    outOfBounds clamp;
+}
+
+pulseLaser false;
+
+V_incident      (0 1 0);
+
+laserRadius     50e-6;          // 100 um spot diameter (Zhang r_laser = 50 um)
+
+N_sub_divisions 1;
+
+nRadial         35;
+
+nAngular        240;
+
+wavelength      1.070e-6;
+
+e_num_density   4e29;
+
+Radius_Flavour  2.0;
+
+PowderSim false;
+
+useLocalSearch  true;

@@ -1,0 +1,11 @@
+#!/bin/bash
+
+. $WM_PROJECT_DIR/bin/tools/CleanFunctions
+
+cleanCase
+
+echo "Removing 0, VTKs, and log files"
+rm -rf 0 VTKs VTK
+rm -rf absorptivity_vs_time
+rm -rf post-processing-data
+rm -f log.*

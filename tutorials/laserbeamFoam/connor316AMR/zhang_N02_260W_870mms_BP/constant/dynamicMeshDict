@@ -1,0 +1,60 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      dynamicMeshDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+dynamicFvMesh   dynamicRefineFvMesh;
+
+// AMR: 20 um base -> 10 um -> 5 um (2 refinement levels)
+amrCriterion    interfaceOnly;
+
+// How often to refine (every N timesteps)
+refineInterval  20;
+
+// Field to base refinement on
+field           meshRefinementIndicator;
+
+// Refine field in range lower..upper
+lowerRefineLevel 0.5;
+upperRefineLevel 1.5;
+
+// Unrefine if value < unrefineLevel
+unrefineLevel   0.05;
+
+// 2:1 buffer layers
+nBufferLayers   2;
+
+// 2 levels: 20 um -> 5 um
+maxRefinement   2;
+
+// Max cells before refinement stops (3M for 5 um near melt pool)
+maxCells        3000000;
+
+correctFluxes
+(
+    (phi U)
+    (nHatf none)
+    (rhoPhi none)
+    (alphaPhi0.metal none)
+    (ghf none)
+    (alphaPhiUn none)
+    (rhophicp none)
+    (dVf_ none)
+    (alphaPhi_ none)
+);
+
+dumpLevel       true;
+
+
+// ************************************************************************* //
