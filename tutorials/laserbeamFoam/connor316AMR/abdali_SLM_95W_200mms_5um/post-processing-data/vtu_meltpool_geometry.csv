@@ -1,0 +1,2 @@
+time,z_slice_um,surface_y_um,T_liq_K,keyholeDepth_um,keyholeDepthX_um,keyholeDepthY_um,meltPoolDepth_um,meltPoolDepthX_um,meltPoolDepthY_um,keyholeWidth_um,keyholeWidthXLeft_um,keyholeWidthXRight_um,meltPoolWidth_um,meltPoolWidthXLeft_um,meltPoolWidthXRight_um
+0.0002000551624,234.6368713378906,100.0,1723.0,10.848702212021777,150.83799743652344,110.84870221202178,31.017884071789837,154.18994140625,131.01788407178984,86.04595479857032,107.59107675245055,193.63703155102087,116.30475417843147,91.80987718681493,208.1146313652464

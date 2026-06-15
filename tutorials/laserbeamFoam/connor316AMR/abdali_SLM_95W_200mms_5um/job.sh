@@ -2,7 +2,7 @@
 #SBATCH --job-name=abdali_SLM
 #SBATCH --time=24:00:00
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=32
+#SBATCH --ntasks-per-node=8
 #SBATCH --account=mch250110
 #SBATCH --output=output_%j.out
 #SBATCH --error=output_%j.err
