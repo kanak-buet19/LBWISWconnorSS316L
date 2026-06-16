@@ -16,6 +16,8 @@ from __future__ import annotations
 import csv
 import json
 import os
+import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -130,6 +132,31 @@ def fmt_params(p: dict) -> str:
     return " ".join(parts)
 
 
+def strip_heavy(case_dir: Path) -> int:
+    """Delete the bulky run artifacts (decomposed + reconstructed time dirs and
+    VTK) from a finished case, keeping the tiny post-processing CSV, logs and
+    case_build.json. Returns number of dirs removed. Safe to call only after the
+    sim has terminated."""
+    cd = Path(case_dir)
+    if not cd.exists():
+        return 0
+    removed = 0
+    targets = list(cd.glob("processor*"))
+    for name in ("VTK", "VTKs", "dynamicCode"):
+        d = cd / name
+        if d.is_dir():
+            targets.append(d)
+    # reconstructed root time dirs (numeric name, keep "0" = initial fields)
+    for p in cd.iterdir():
+        if (p.is_dir() and p.name != "0"
+                and re.fullmatch(r"[0-9][0-9.eE+\-]*", p.name)):
+            targets.append(p)
+    for d in targets:
+        shutil.rmtree(d, ignore_errors=True)
+        removed += 1
+    return removed
+
+
 # --------------------------------------------------------------------------- #
 # Job model
 # --------------------------------------------------------------------------- #
@@ -187,6 +214,14 @@ class Calibrator:
         self.stability_tol = self.early.get("stabilityTol", 0.10)
         self.param_names = pspec_keys(cfg["parameters"])
 
+        # disk saver: keep only the single best candidate's full data (VTK +
+        # processor*). When a better candidate completes, the previous best is
+        # stripped; every non-best candidate is stripped as soon as it finishes.
+        clean = cfg.get("cleanup", {})
+        self.cleanup_enabled = bool(clean.get("enabled", True))
+        self.best_kept_cand: int | None = None
+        self.best_kept_obj = float("inf")
+
         ex = cfg["execution"]
         self.total_cores = int(os.environ.get("CALIB_TOTAL_CORES", ex["totalCores"]))
         self.cores_per_sim = int(os.environ.get("CALIB_CORES_PER_SIM", ex["coresPerSim"]))
@@ -240,6 +275,7 @@ class Calibrator:
                         f"(case0 err {first_err*100:.0f}% > "
                         f"{self.early['errorThreshold']*100:.0f}%)")
                     rec["cases"][case_cfg["name"]] = {"status": "skipped"}
+                self._update_objective(job.cand_id)
                 return
 
         self.queue.append(self.build_job(job.cand_id, self.cases[next_idx]))
@@ -261,6 +297,7 @@ class Calibrator:
             while self.queue or self.running:
                 self._fill()
                 self._poll_running()
+                self._dispose_completed()
                 self._print_progress()
                 self._write_status()
                 time.sleep(self.poll)
@@ -365,6 +402,52 @@ class Calibrator:
                 entry["note"] = f"eval failed: {exc}"
         rec["cases"][job.name] = entry
         self._update_objective(job.cand_id)
+
+    def _strip_candidate(self, cand_id: int) -> int:
+        """Strip VTK + processor*/ + reconstructed time dirs from every case
+        dir of a candidate. Tiny CSV/logs/build json are kept."""
+        base = RUNS / f"cand_{cand_id:02d}"
+        if not base.exists():
+            return 0
+        n = 0
+        for cdir in sorted(base.iterdir()):
+            if cdir.is_dir():
+                n += strip_heavy(cdir)
+        return n
+
+    def _dispose_completed(self) -> None:
+        """Keep only the best-so-far candidate's full data. When a candidate
+        finishes: if it is the new best, strip the previous best; otherwise
+        strip it now. Idempotent via the per-record '_disposed' flag."""
+        if not self.cleanup_enabled:
+            return
+        for rec in self.records:
+            if rec["status"] != "complete" or rec.get("_disposed"):
+                continue
+            cid = rec["id"]
+            if cid == self.best_kept_cand:  # retained best, never re-examine
+                continue
+            obj = rec["objective"]
+            valid = obj == obj and obj < PENALTY  # finite, real result
+            if valid and obj < self.best_kept_obj:
+                if self.best_kept_cand is not None:
+                    m = self._strip_candidate(self.best_kept_cand)
+                    log(f"cand {self.best_kept_cand:02d} STRIP (superseded by "
+                        f"#{cid:02d} obj {obj:.3f}, {m} dirs)")
+                    self.records[self.best_kept_cand]["_disposed"] = True
+                self.best_kept_obj = obj
+                self.best_kept_cand = cid
+                log(f"cand {cid:02d} KEEP data (new best obj {obj:.3f})")
+                # note: do NOT mark _disposed - this is the retained best
+            else:
+                m = self._strip_candidate(cid)
+                rec["_disposed"] = True
+                if m:
+                    ostr = f"{obj:.3f}" if valid else "n/a"
+                    bstr = (f"{self.best_kept_obj:.3f}"
+                            if self.best_kept_obj < float("inf") else "n/a")
+                    log(f"cand {cid:02d} STRIP ({m} dirs, obj {ostr} "
+                        f"not best {bstr})")
 
     def _update_objective(self, cand_id: int) -> None:
         rec = self.records[cand_id]
