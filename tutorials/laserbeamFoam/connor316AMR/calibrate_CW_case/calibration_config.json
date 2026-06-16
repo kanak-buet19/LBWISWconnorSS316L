@@ -9,11 +9,11 @@
   },
 
   "optimizer": {
-    "method": "lhs",
-    "nSamples": 32,
+    "method": "bo_tpe",
+    "nSamples": 48,
+    "initSamples": 16,
     "seed": 42,
-    "includeBaseline": true,
-    "_comment": "32 candidates total (baseline + 31 LHS). Each candidate runs the single validation case. 12 free params -> 32 samples is a reasonable screening budget."
+    "_comment": "Bayesian optimization (Optuna TPE). nSamples = total evaluation budget (48 sims). First initSamples (16) are a Latin-Hypercube design for exploration; after that the TPE surrogate proposes where melt-pool error is likely lower. Proposals stream in batches up to maxParallel (constant-liar keeps a batch diversified). Each candidate runs the single validation case; lower objective is better."
   },
 
   "parameters": {

@@ -64,7 +64,7 @@ command -v apptainer
 test -f "$OF2506_IMAGE"
 "$PYTHON" - <<'PY'
 import importlib, sys
-req = ["matplotlib", "numpy", "pandas", "pyvista", "scipy", "tqdm", "vtk"]
+req = ["matplotlib", "numpy", "optuna", "pandas", "pyvista", "scipy", "tqdm", "vtk"]
 miss = []
 for m in req:
     try:

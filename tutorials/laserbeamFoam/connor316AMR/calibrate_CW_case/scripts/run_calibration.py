@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-"""CW single-track 316L melt-pool calibration orchestrator.
+"""CW single-track 316L melt-pool calibration orchestrator (Bayesian).
 
-Samples thermophysical parameter sets (LHS + baseline), runs each candidate on
-BOTH validation cases as a parallel swarm of laserbeamFoam sims, scores them
-against Hofmann (2026) experimental melt-pool depth/width, and reports the best
-shared parameter set.
+Drives a Bayesian-optimization loop over the shared thermophysical parameters:
+seed the search with a Latin-Hypercube design, then let Optuna's TPE surrogate
+propose where the melt-pool error is likely lower. Candidates run as a parallel
+swarm of laserbeamFoam sims, are scored against Hofmann (2026) experimental
+depth/width, and the optimizer is told each result so the next proposals
+improve. Proposals stream until the evaluation budget is spent.
 
 Run via ./Allrun (local) or job_calibration.sh (HPC). All knobs live in
 calibration_config.json; cores can be overridden by env CALIB_TOTAL_CORES /
@@ -29,9 +31,10 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 sys.path.insert(0, str(HERE))
 
-import caselib          # noqa: E402
-import evaluate as ev   # noqa: E402
-import plots            # noqa: E402
+import caselib              # noqa: E402
+import evaluate as ev       # noqa: E402
+import plots                # noqa: E402
+from optimizer import BOOptimizer  # noqa: E402
 
 CONFIG = ROOT / "calibration_config.json"
 TEMPLATE = ROOT / "template_case"
@@ -49,31 +52,6 @@ def ts() -> str:
 
 def log(msg: str) -> None:
     print(f"[{ts()}] {msg}", flush=True)
-
-
-def sample_params(cfg: dict) -> list[dict]:
-    """LHS samples in parameter ranges, optionally prepended with baseline."""
-    pspec = cfg["parameters"]
-    names = [k for k in pspec_keys(pspec)]
-    lows = [pspec[k]["min"] for k in names]
-    highs = [pspec[k]["max"] for k in names]
-
-    opt = cfg["optimizer"]
-    n_total = int(opt["nSamples"])
-    include_baseline = bool(opt.get("includeBaseline", True))
-    n_lhs = n_total - (1 if include_baseline else 0)
-
-    from scipy.stats import qmc
-    sampler = qmc.LatinHypercube(d=len(names), seed=opt.get("seed", 0))
-    unit = sampler.random(n=n_lhs)
-    scaled = qmc.scale(unit, lows, highs)
-
-    candidates = []
-    if include_baseline:
-        candidates.append({k: pspec[k]["baseline"] for k in names})
-    for row in scaled:
-        candidates.append({k: float(v) for k, v in zip(names, row)})
-    return candidates
 
 
 def pspec_keys(pspec: dict) -> list[str]:
@@ -162,11 +140,12 @@ def strip_heavy(case_dir: Path) -> int:
 # --------------------------------------------------------------------------- #
 class Job:
     def __init__(self, cand_id: int, params: dict, case_cfg: dict,
-                 case_dir: Path, geom: dict):
+                 case_dir: Path, geom: dict, trial=None):
         self.cand_id = cand_id
         self.params = params
         self.case_cfg = case_cfg
         self.case_dir = case_dir
+        self.trial = trial   # optuna Trial for sims proposed this run, else None
         self.surface_y_um = geom["surface_y_um"]
         self.proc: subprocess.Popen | None = None
         self.started = None
@@ -229,19 +208,26 @@ class Calibrator:
         self.poll = ex.get("pollIntervalSec", 10)
         self.timeout = ex.get("perSimTimeoutSec", 14400)
 
-        self.candidates = sample_params(cfg)
-        # per-candidate record
-        self.records = [{
-            "id": i, "params": p, "params_pretty": fmt_params(p),
-            "cases": {}, "objective": float("nan"), "status": "pending",
-        } for i, p in enumerate(self.candidates)]
+        # Bayesian optimization: total evaluation budget + LHS init size
+        opt = cfg["optimizer"]
+        self.budget = int(opt["nSamples"])
+        self.n_init = int(opt.get("initSamples", min(16, self.budget)))
+        self.seed = int(opt.get("seed", 42))
+        self.opt = BOOptimizer(cfg["parameters"], self.param_names,
+                               self.n_init, self.seed)
 
+        self.records: list[dict] = []   # grows as the optimizer proposes
         self.queue: list[Job] = []
         self.running: list[Job] = []
+        self.resume_ids: list[int] = []  # incomplete prior candidates to rerun
         self.done_count = 0
         self.cancelled = False
         self.started_at = datetime.now().isoformat(timespec="seconds")
+
         self._load_prior()
+        # fresh start: lay down the Latin-Hypercube initial design
+        if not self.records:
+            self.opt.seed_lhs(self.n_init, self.seed)
 
     # -- resume helpers ---------------------------------------------------- #
     def _cand_dir(self, cid: int) -> Path:
@@ -286,41 +272,77 @@ class Calibrator:
         except OSError:
             pass
 
+    def _new_record(self, params: dict) -> int:
+        """Append a candidate record; its id is its position. Returns the id."""
+        cid = len(self.records)
+        self.records.append({
+            "id": cid, "params": params, "params_pretty": fmt_params(params),
+            "cases": {}, "objective": float("nan"), "status": "pending",
+        })
+        return cid
+
     def _load_prior(self) -> None:
-        """Reload completed candidates from a previous job so we don't restart
-        from scratch. A clean runs/ folder starts fresh."""
+        """Reload candidates from a previous job so we don't restart from
+        scratch: completed ones are replayed into the surrogate and skipped;
+        in-flight ones are queued for resume. A clean runs/ folder starts
+        fresh. Candidate dirs are contiguous cand_00, cand_01, ..."""
         if not RUNS.exists():
             return
-        loaded = 0
-        for cid in range(len(self.candidates)):
+        loaded = completed = 0
+        cid = 0
+        while (RUNS / f"cand_{cid:02d}").exists():
             rp = self._result_path(cid)
-            if not rp.exists():
-                continue
-            try:
-                data = json.loads(rp.read_text())
-            except (OSError, ValueError):
-                continue
+            data = None
+            if rp.exists():
+                try:
+                    data = json.loads(rp.read_text())
+                except (OSError, ValueError):
+                    data = None
+            params = self._cand_params(cid, data)
+            if params is None:
+                break  # can't reconstruct -> stop (treat as the frontier)
+            self._new_record(params)
             rec = self.records[cid]
-            rec["objective"] = data.get("objective", float("nan"))
-            rec["status"] = data.get("status", rec["status"])
-            rec["cases"] = data.get("cases", {})
-            if data.get("disposed"):
-                rec["_disposed"] = True
             loaded += 1
-            self.done_count += sum(
-                1 for c in rec["cases"].values()
-                if c.get("status") in ("done", "aborted", "failed", "skipped"))
-            obj = rec["objective"]
-            if obj == obj and obj < PENALTY and self._cand_has_vtk(cid):
-                if obj < self.best_kept_obj:
-                    self.best_kept_obj = obj
-                    self.best_kept_cand = cid
+            if data and data.get("status") == "complete":
+                rec["objective"] = data.get("objective", float("nan"))
+                rec["status"] = "complete"
+                rec["cases"] = data.get("cases", {})
+                rec["_told"] = True
+                if data.get("disposed"):
+                    rec["_disposed"] = True
+                self.done_count += sum(
+                    1 for c in rec["cases"].values()
+                    if c.get("status") in ("done", "aborted", "failed", "skipped"))
+                obj = rec["objective"]
+                val = obj if (obj == obj and obj < PENALTY) else PENALTY
+                self.opt.replay(params, val)       # teach surrogate
+                completed += 1
+                if obj == obj and obj < PENALTY and self._cand_has_vtk(cid):
+                    if obj < self.best_kept_obj:
+                        self.best_kept_obj, self.best_kept_cand = obj, cid
+            else:
+                self.resume_ids.append(cid)        # rerun / continue this one
+            cid += 1
         if loaded:
-            log(f"RESUME: restored {loaded} prior candidate(s); "
+            log(f"RESUME: restored {loaded} candidate(s) "
+                f"({completed} complete, {len(self.resume_ids)} to resume); "
                 f"best so far {self._best_objective()}")
 
+    def _cand_params(self, cid: int, data: dict | None) -> dict | None:
+        """Recover a candidate's params from result.json or case_build.json."""
+        if data and data.get("params"):
+            return data["params"]
+        for cdir in (RUNS / f"cand_{cid:02d}").glob("*/case_build.json"):
+            try:
+                return json.loads(cdir.read_text())["params"]
+            except (OSError, ValueError, KeyError):
+                continue
+        return None
+
     # -- scheduling -------------------------------------------------------- #
-    def build_job(self, cand_id: int, case_cfg: dict) -> Job:
+    def build_job(self, cand_id: int, case_cfg: dict, trial=None) -> Job:
+        params = self.records[cand_id]["params"]
         case_dir = RUNS / f"cand_{cand_id:02d}" / case_cfg["name"]
         # resume an in-flight sim instead of wiping it; Allrun_long continues
         # from latestTime when processor dirs past t=0 already exist
@@ -328,17 +350,26 @@ class Calibrator:
             rec = json.loads((case_dir / "case_build.json").read_text())
             log(f"cand {cand_id:02d} {case_cfg['name']} RESUME (existing run)")
         else:
-            rec = caselib.build_case(TEMPLATE, case_dir, self.candidates[cand_id],
-                                     case_cfg, self.geom, self.control,
-                                     self.cores_per_sim)
-        return Job(cand_id, self.candidates[cand_id], case_cfg, case_dir,
-                   {"surface_y_um": rec["surface_y_um"]})
+            rec = caselib.build_case(TEMPLATE, case_dir, params, case_cfg,
+                                     self.geom, self.control, self.cores_per_sim)
+        return Job(cand_id, params, case_cfg, case_dir,
+                   {"surface_y_um": rec["surface_y_um"]}, trial=trial)
 
-    def enqueue_first_cases(self) -> None:
-        for cid in range(len(self.candidates)):
-            if self.records[cid]["status"] == "complete":
-                continue  # already finished in a prior job
+    def _enqueue_resumes(self) -> None:
+        """Re-queue candidates that a prior job left in flight."""
+        for cid in self.resume_ids:
             self.queue.append(self.build_job(cid, self.cases[0]))
+
+    def _maybe_propose(self) -> None:
+        """Keep the pipeline full: while a slot is free and budget remains, ask
+        the optimizer for the next parameter set and queue it."""
+        while (len(self.records) < self.budget
+               and len(self.queue) + len(self.running) < self.max_parallel):
+            params, trial = self.opt.ask()
+            cid = self._new_record(params)
+            phase = "INIT" if cid < self.n_init else "BO"
+            log(f"cand {cid:02d} PROPOSE [{phase}] {fmt_params(params)}")
+            self.queue.append(self.build_job(cid, self.cases[0], trial=trial))
 
     def maybe_enqueue_next(self, job: Job) -> None:
         try:
@@ -366,20 +397,17 @@ class Calibrator:
         self.queue.append(self.build_job(job.cand_id, self.cases[next_idx]))
 
     # -- main loop --------------------------------------------------------- #
-    def total_planned(self) -> int:
-        # lower bound; second cases may be skipped
-        return len(self.candidates) * len(self.cases)
-
     def run(self) -> None:
         RESULTS.mkdir(parents=True, exist_ok=True)
-        log(f"=== CW calibration: {len(self.candidates)} candidates x "
-            f"{len(self.cases)} cases ===")
+        log(f"=== CW calibration (Bayesian): budget {self.budget} sims, "
+            f"{self.n_init} LHS init, then TPE ===")
         log(f"cores: total={self.total_cores} perSim={self.cores_per_sim} "
             f"-> maxParallel={self.max_parallel}")
-        self.enqueue_first_cases()
+        self._enqueue_resumes()
 
         try:
-            while self.queue or self.running:
+            while (len(self.records) < self.budget or self.queue or self.running):
+                self._maybe_propose()
                 self._fill()
                 self._poll_running()
                 self._dispose_completed()
@@ -487,6 +515,25 @@ class Calibrator:
                 entry["note"] = f"eval failed: {exc}"
         rec["cases"][job.name] = entry
         self._update_objective(job.cand_id)
+        self._tell_if_complete(job)
+
+    def _tell_if_complete(self, job: Job) -> None:
+        """Feed a finished candidate's objective back to the surrogate so the
+        next proposals improve. Tell the live trial if this sim was proposed
+        this run, else replay (resumed sim)."""
+        rec = self.records[job.cand_id]
+        if rec["status"] != "complete" or rec.get("_told"):
+            return
+        rec["_told"] = True
+        obj = rec["objective"]
+        val = obj if (obj == obj and obj < PENALTY) else PENALTY
+        try:
+            if job.trial is not None:
+                self.opt.tell(job.trial, val)
+            else:
+                self.opt.replay(rec["params"], val)
+        except Exception as exc:   # never let optimizer bookkeeping kill the run
+            log(f"cand {job.cand_id:02d} optimizer tell failed: {exc}")
 
     def _strip_candidate(self, cand_id: int) -> int:
         """Strip VTK + processor*/ + reconstructed time dirs from every case
@@ -585,7 +632,8 @@ class Calibrator:
             "started_at": self.started_at,
             "updated_at": datetime.now().isoformat(timespec="seconds"),
             "cancelled": self.cancelled,
-            "candidates_total": len(self.candidates),
+            "budget": self.budget,
+            "candidates_proposed": len(self.records),
             "jobs_done": self.done_count,
             "jobs_running": len(self.running),
             "jobs_queued": len(self.queue),
