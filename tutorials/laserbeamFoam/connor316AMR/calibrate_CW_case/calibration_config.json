@@ -13,7 +13,7 @@
     "nSamples": 32,
     "seed": 42,
     "includeBaseline": true,
-    "_comment": "32 candidates total (baseline + 31 LHS). Each candidate runs ALL 3 cases. 12 free params -> 32 samples is a reasonable screening budget."
+    "_comment": "32 candidates total (baseline + 31 LHS). Each candidate runs the single validation case. 12 free params -> 32 samples is a reasonable screening budget."
   },
 
   "parameters": {
@@ -34,14 +34,14 @@
 
   "geometry": {
     "_comment": "Common geometry constants in metres. Per-case y/z extents computed from these + process/target.",
-    "base_cell": 20e-6,
-    "gas_thickness": 140e-6,
+    "base_cell": 24e-6,
+    "gas_thickness": 144e-6,
     "x_extent": 512e-6,
     "lead_in": 230e-6,
     "tail": 180e-6,
     "substrate_depth_factor": 2.5,
     "substrate_min": 224e-6,
-    "surface_y_um": 140.0
+    "surface_y_um": 144.0
   },
 
   "control": {
@@ -63,26 +63,6 @@
       "exp_width_um": 114.60,
       "exp_depth_um": 93.95,
       "_exp_rows": "Hofmann rows 332 (w117.0 d91.8) + 484 (w112.21 d96.11), mean"
-    },
-    {
-      "name": "case_P200_v600",
-      "P_laser_W": 200,
-      "v_scan_mm_s": 600,
-      "d_laser_mm": 0.05,
-      "laserRadius_m": 25e-6,
-      "exp_width_um": 131.10,
-      "exp_depth_um": 163.80,
-      "_exp_rows": "Hofmann row 652 (w131.1 d163.8)"
-    },
-    {
-      "name": "case_P200_v900_r40",
-      "P_laser_W": 200,
-      "v_scan_mm_s": 900,
-      "d_laser_mm": 0.08,
-      "laserRadius_m": 40e-6,
-      "exp_width_um": 111.52,
-      "exp_depth_um": 57.79,
-      "_exp_rows": "Hofmann row 111 (P200 v900 d0.08 t_powder=0 balling=0)"
     }
   ],
 

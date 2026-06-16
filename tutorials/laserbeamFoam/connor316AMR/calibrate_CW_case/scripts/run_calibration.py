@@ -241,18 +241,103 @@ class Calibrator:
         self.done_count = 0
         self.cancelled = False
         self.started_at = datetime.now().isoformat(timespec="seconds")
+        self._load_prior()
+
+    # -- resume helpers ---------------------------------------------------- #
+    def _cand_dir(self, cid: int) -> Path:
+        return RUNS / f"cand_{cid:02d}"
+
+    def _result_path(self, cid: int) -> Path:
+        return self._cand_dir(cid) / "result.json"
+
+    @staticmethod
+    def _case_has_progress(case_dir: Path) -> bool:
+        """True if a sim has written past t=0 (resumable, mirrors Allrun_long)."""
+        p0 = case_dir / "processor0"
+        if not p0.is_dir():
+            return False
+        for d in p0.iterdir():
+            if d.is_dir() and d.name != "0" and re.fullmatch(r"[0-9][0-9.eE+\-]*", d.name):
+                return True
+        return False
+
+    def _cand_has_vtk(self, cid: int) -> bool:
+        base = self._cand_dir(cid)
+        return base.exists() and any(
+            (c / "VTK").is_dir() for c in base.iterdir() if c.is_dir())
+
+    def _persist_candidate(self, cid: int) -> None:
+        """Write a small result.json so a resubmitted job can skip/restore this
+        candidate. Survives strip_heavy (which only deletes VTK/processor/time
+        dirs)."""
+        base = self._cand_dir(cid)
+        if not base.exists():
+            return
+        rec = self.records[cid]
+        payload = {
+            "id": cid, "params": rec["params"], "objective": rec["objective"],
+            "status": rec["status"], "disposed": bool(rec.get("_disposed")),
+            "cases": {n: {k: v for k, v in c.items() if k != "series"}
+                      for n, c in rec["cases"].items()},
+        }
+        try:
+            self._result_path(cid).write_text(
+                json.dumps(payload, indent=2, default=str))
+        except OSError:
+            pass
+
+    def _load_prior(self) -> None:
+        """Reload completed candidates from a previous job so we don't restart
+        from scratch. A clean runs/ folder starts fresh."""
+        if not RUNS.exists():
+            return
+        loaded = 0
+        for cid in range(len(self.candidates)):
+            rp = self._result_path(cid)
+            if not rp.exists():
+                continue
+            try:
+                data = json.loads(rp.read_text())
+            except (OSError, ValueError):
+                continue
+            rec = self.records[cid]
+            rec["objective"] = data.get("objective", float("nan"))
+            rec["status"] = data.get("status", rec["status"])
+            rec["cases"] = data.get("cases", {})
+            if data.get("disposed"):
+                rec["_disposed"] = True
+            loaded += 1
+            self.done_count += sum(
+                1 for c in rec["cases"].values()
+                if c.get("status") in ("done", "aborted", "failed", "skipped"))
+            obj = rec["objective"]
+            if obj == obj and obj < PENALTY and self._cand_has_vtk(cid):
+                if obj < self.best_kept_obj:
+                    self.best_kept_obj = obj
+                    self.best_kept_cand = cid
+        if loaded:
+            log(f"RESUME: restored {loaded} prior candidate(s); "
+                f"best so far {self._best_objective()}")
 
     # -- scheduling -------------------------------------------------------- #
     def build_job(self, cand_id: int, case_cfg: dict) -> Job:
         case_dir = RUNS / f"cand_{cand_id:02d}" / case_cfg["name"]
-        rec = caselib.build_case(TEMPLATE, case_dir, self.candidates[cand_id],
-                                 case_cfg, self.geom, self.control,
-                                 self.cores_per_sim)
+        # resume an in-flight sim instead of wiping it; Allrun_long continues
+        # from latestTime when processor dirs past t=0 already exist
+        if self._case_has_progress(case_dir) and (case_dir / "case_build.json").exists():
+            rec = json.loads((case_dir / "case_build.json").read_text())
+            log(f"cand {cand_id:02d} {case_cfg['name']} RESUME (existing run)")
+        else:
+            rec = caselib.build_case(TEMPLATE, case_dir, self.candidates[cand_id],
+                                     case_cfg, self.geom, self.control,
+                                     self.cores_per_sim)
         return Job(cand_id, self.candidates[cand_id], case_cfg, case_dir,
                    {"surface_y_um": rec["surface_y_um"]})
 
     def enqueue_first_cases(self) -> None:
         for cid in range(len(self.candidates)):
+            if self.records[cid]["status"] == "complete":
+                continue  # already finished in a prior job
             self.queue.append(self.build_job(cid, self.cases[0]))
 
     def maybe_enqueue_next(self, job: Job) -> None:
@@ -435,6 +520,7 @@ class Calibrator:
                     log(f"cand {self.best_kept_cand:02d} STRIP (superseded by "
                         f"#{cid:02d} obj {obj:.3f}, {m} dirs)")
                     self.records[self.best_kept_cand]["_disposed"] = True
+                    self._persist_candidate(self.best_kept_cand)
                 self.best_kept_obj = obj
                 self.best_kept_cand = cid
                 log(f"cand {cid:02d} KEEP data (new best obj {obj:.3f})")
@@ -442,6 +528,7 @@ class Calibrator:
             else:
                 m = self._strip_candidate(cid)
                 rec["_disposed"] = True
+                self._persist_candidate(cid)
                 if m:
                     ostr = f"{obj:.3f}" if valid else "n/a"
                     bstr = (f"{self.best_kept_obj:.3f}"
@@ -461,9 +548,13 @@ class Calibrator:
         elif n_have >= n_expected:
             rec["objective"] = PENALTY
         # status summary
+        was_complete = rec["status"] == "complete"
         if n_have >= n_expected or any(c.get("status") == "skipped"
                                        for c in rec["cases"].values()):
             rec["status"] = "complete"
+        # persist on transition to complete so a resubmit can skip it
+        if rec["status"] == "complete" and not was_complete:
+            self._persist_candidate(cand_id)
 
     def _report_finish(self, job: Job) -> None:
         c = self.records[job.cand_id]["cases"].get(job.name, {})

@@ -36,7 +36,7 @@ unrefineLevel   0.05;
 nBufferLayers   2;
 
 // Refine cells only up to maxRefinement levels
-maxRefinement   2;  // 20 um base -> 2 levels -> 10 um -> 5 um
+maxRefinement   2;  // 24 um base -> 2 levels -> 12 um -> 6 um
 
 // Stop refinement if maxCells reached
 maxCells        400000;
