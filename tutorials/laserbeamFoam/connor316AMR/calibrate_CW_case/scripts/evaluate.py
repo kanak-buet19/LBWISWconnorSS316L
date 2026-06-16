@@ -40,17 +40,33 @@ def read_series(case_dir: Path) -> list[dict]:
     return rows
 
 
-def _stable(values: list[float], tol: float) -> tuple[float, bool]:
-    """Stable estimate of a series tail. Returns (value, converged)."""
-    if not values:
-        return float("nan"), False
-    if len(values) == 1:
-        return values[-1], False
-    a, b = values[-2], values[-1]
-    rel = abs(b - a) / abs(b) if b else float("inf")
-    converged = rel < tol
-    value = (a + b) / 2.0 if converged else b
-    return value, converged
+def _stable(values: list[float], tol: float) -> tuple[float, bool, int]:
+    """Find longest stable tail window.
+
+    Walk backward from the end; extend while (max-min)/mean < tol.
+    Stop when adding an older point breaks that bound — that's the transient edge.
+    Returns (mean_of_stable_window, converged, n_stable).
+    converged = True only when n_stable >= 2.
+    """
+    n = len(values)
+    if n == 0:
+        return float("nan"), False, 0
+    if n == 1:
+        return values[0], False, 1
+
+    stable_n = 1
+    for size in range(2, n + 1):
+        w = values[-size:]
+        mean_v = sum(w) / len(w)
+        if mean_v == 0:
+            break
+        if (max(w) - min(w)) / abs(mean_v) < tol:
+            stable_n = size
+        else:
+            break
+
+    w = values[-stable_n:]
+    return sum(w) / len(w), stable_n >= 2, stable_n
 
 
 def evaluate(case_dir: Path, exp_depth_um: float, exp_width_um: float,
@@ -60,8 +76,8 @@ def evaluate(case_dir: Path, exp_depth_um: float, exp_width_um: float,
     depths = [r["depth"] for r in series]
     widths = [r["width"] for r in series]
 
-    depth, d_conv = _stable(depths, stability_tol)
-    width, w_conv = _stable(widths, stability_tol)
+    depth, d_conv, d_n = _stable(depths, stability_tol)
+    width, w_conv, w_n = _stable(widths, stability_tol)
 
     def rel(sim, exp):
         return float("nan") if not exp else (sim - exp) / exp
@@ -77,6 +93,7 @@ def evaluate(case_dir: Path, exp_depth_um: float, exp_width_um: float,
         "exp_depth_um": exp_depth_um, "exp_width_um": exp_width_um,
         "depth_err": depth_err, "width_err": width_err,
         "depth_converged": d_conv, "width_converged": w_conv,
+        "depth_n_stable": d_n, "width_n_stable": w_n,
         "converged": d_conv and w_conv,
         "case_error": case_error,
         "series": series,

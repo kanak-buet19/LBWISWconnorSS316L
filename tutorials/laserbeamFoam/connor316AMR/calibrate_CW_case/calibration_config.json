@@ -38,7 +38,7 @@
     "gas_thickness": 144e-6,
     "x_extent": 512e-6,
     "lead_in": 230e-6,
-    "tail": 180e-6,
+    "tail": 230e-6,
     "substrate_depth_factor": 2.5,
     "substrate_min": 224e-6,
     "surface_y_um": 144.0
