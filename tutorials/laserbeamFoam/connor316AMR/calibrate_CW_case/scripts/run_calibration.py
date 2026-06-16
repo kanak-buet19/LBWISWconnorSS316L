@@ -149,6 +149,8 @@ class Job:
         self.surface_y_um = geom["surface_y_um"]
         self.proc: subprocess.Popen | None = None
         self.started = None
+        self.last_sim_t: float | None = None   # latest solver Time seen
+        self.last_advance = None               # wall time of last progress
         self.status = "queued"   # queued|running|done|aborted|failed|cancelled
         self.note = ""
         self.result: dict | None = None
@@ -159,6 +161,7 @@ class Job:
 
     def start(self) -> None:
         self.started = time.time()
+        self.last_advance = self.started
         self.status = "running"
         self.proc = subprocess.Popen(
             run_command(self.case_dir), shell=True, executable="/bin/bash",
@@ -206,7 +209,10 @@ class Calibrator:
         self.cores_per_sim = int(os.environ.get("CALIB_CORES_PER_SIM", ex["coresPerSim"]))
         self.max_parallel = max(1, self.total_cores // self.cores_per_sim)
         self.poll = ex.get("pollIntervalSec", 10)
-        self.timeout = ex.get("perSimTimeoutSec", 14400)
+        # progress-based watchdog: kill a sim only if the solver Time stops
+        # advancing (a real hang/divergence), not just because it is slow.
+        self.stall_timeout = ex.get("perSimStallSec", 1800)     # no advance -> kill
+        self.startup_grace = ex.get("perSimStartupSec", 3600)   # no solver output -> kill
 
         # Bayesian optimization: total evaluation budget + LHS init size
         opt = cfg["optimizer"]
@@ -472,16 +478,30 @@ class Calibrator:
                     self.maybe_enqueue_next(job)
                     self.done_count += 1
                     continue
-            # timeout
-            if rc is None and job.started and (time.time() - job.started) > self.timeout:
-                job.kill()
-                job.status = "failed"
-                job.note = "timeout"
-                log(f"cand {job.cand_id:02d} {job.name} TIMEOUT")
-                self._record_job(job, evaluate=True)
-                self.maybe_enqueue_next(job)
-                self.done_count += 1
-                continue
+            # progress watchdog: kill only on a real stall (solver Time frozen),
+            # not for being slow. Before any solver output, allow startup_grace;
+            # after, require advance within stall_timeout.
+            if rc is None and job.started:
+                now = time.time()
+                pr = sim_progress(job.case_dir)
+                if pr is not None and pr[0] is not None:
+                    if job.last_sim_t is None or pr[0] > job.last_sim_t:
+                        job.last_sim_t = pr[0]
+                        job.last_advance = now
+                if job.last_sim_t is None:
+                    window, why = self.startup_grace, "no solver output"
+                else:
+                    window, why = self.stall_timeout, "solver Time stalled"
+                if now - (job.last_advance or job.started) > window:
+                    job.kill()
+                    job.status = "failed"
+                    job.note = f"{why} > {window}s"
+                    log(f"cand {job.cand_id:02d} {job.name} STALLED "
+                        f"({job.note}; last t={job.last_sim_t})")
+                    self._record_job(job, evaluate=True)
+                    self.maybe_enqueue_next(job)
+                    self.done_count += 1
+                    continue
             if rc is None:
                 still.append(job)
                 continue

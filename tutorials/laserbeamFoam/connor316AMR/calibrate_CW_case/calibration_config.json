@@ -85,6 +85,8 @@
     "totalCores": 64,
     "_comment": "maxParallel = floor(totalCores / coresPerSim) = 8 parallel sims. Override with env CALIB_TOTAL_CORES / CALIB_CORES_PER_SIM (HPC sets these via job_calibration.sh).",
     "pollIntervalSec": 10,
-    "perSimTimeoutSec": 14400
+    "perSimStallSec": 1800,
+    "perSimStartupSec": 3600,
+    "_watchdog": "Progress-based, not wall-clock. A sim is killed only if the solver Time stops advancing: perSimStallSec (1800s=30min) with no advance once running, or perSimStartupSec (3600s=1h) with no solver output at all after launch. Slow-but-progressing sims are NOT killed."
   }
 }
