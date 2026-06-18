@@ -84,7 +84,16 @@ def evaluate(case_dir: Path, exp_depth_um: float, exp_width_um: float,
 
     depth_err = rel(depth, exp_depth_um)
     width_err = rel(width, exp_width_um)
-    errs = [abs(e) for e in (depth_err, width_err) if e == e]  # drop nan
+
+    # Aspect ratio error prevents compensating errors (e.g., depth +10%,
+    # width -10%) from scoring well just because abs errors cancel in mean.
+    exp_ar = exp_depth_um / exp_width_um if exp_width_um else float("nan")
+    sim_ar = depth / width if width else float("nan")
+    ar_err = (abs(sim_ar - exp_ar) / exp_ar
+              if exp_ar and sim_ar == sim_ar and exp_ar == exp_ar
+              else float("nan"))
+
+    errs = [e for e in (abs(depth_err), abs(width_err), ar_err) if e == e]
     case_error = sum(errs) / len(errs) if errs else float("nan")
 
     return {
@@ -92,6 +101,7 @@ def evaluate(case_dir: Path, exp_depth_um: float, exp_width_um: float,
         "sim_depth_um": depth, "sim_width_um": width,
         "exp_depth_um": exp_depth_um, "exp_width_um": exp_width_um,
         "depth_err": depth_err, "width_err": width_err,
+        "ar_err": ar_err,
         "depth_converged": d_conv, "width_converged": w_conv,
         "depth_n_stable": d_n, "width_n_stable": w_n,
         "converged": d_conv and w_conv,
@@ -109,10 +119,11 @@ def should_abort(case_dir: Path, exp_depth_um: float, exp_width_um: float,
         return False, ""
     if not ev["converged"]:
         return False, ""
-    worst = max((abs(e) for e in (ev["depth_err"], ev["width_err"]) if e == e),
-                default=0.0)
+    worst = max((abs(e) for e in (ev["depth_err"], ev["width_err"], ev.get("ar_err", float("nan")))
+                if e == e), default=0.0)
     if worst > error_threshold:
         return True, (f"stabilized but error {worst*100:.0f}% > "
                       f"{error_threshold*100:.0f}% "
-                      f"(d={ev['sim_depth_um']:.1f} w={ev['sim_width_um']:.1f})")
+                      f"(d={ev['sim_depth_um']:.1f} w={ev['sim_width_um']:.1f} "
+                      f"ar={ev.get('ar_err', float('nan')):.3f})")
     return False, ""

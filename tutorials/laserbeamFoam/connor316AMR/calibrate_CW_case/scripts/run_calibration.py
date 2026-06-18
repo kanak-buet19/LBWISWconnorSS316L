@@ -527,6 +527,7 @@ class Calibrator:
                     "exp_depth_um": res["exp_depth_um"],
                     "exp_width_um": res["exp_width_um"],
                     "depth_err": res["depth_err"], "width_err": res["width_err"],
+                    "ar_err": res.get("ar_err", float("nan")),
                     "case_error": res["case_error"],
                     "converged": res["converged"], "n_points": res["n_points"],
                     "series": res["series"],
@@ -629,10 +630,13 @@ class Calibrator:
             d, w = c["sim_depth_um"], c["sim_width_um"]
             de = c["depth_err"] * 100 if c["depth_err"] == c["depth_err"] else float("nan")
             we = c["width_err"] * 100 if c["width_err"] == c["width_err"] else float("nan")
+            ar = c.get("ar_err", float("nan"))
+            ar_pct = ar * 100 if ar == ar else float("nan")
             conv = "conv" if c.get("converged") else "NOTconv"
             log(f"cand {job.cand_id:02d} {job.name} {job.status.upper()} "
                 f"d={d:.1f}(exp{c['exp_depth_um']:.1f} {de:+.0f}%) "
                 f"w={w:.1f}(exp{c['exp_width_um']:.1f} {we:+.0f}%) "
+                f"arErr={ar_pct:.0f}% "
                 f"caseErr {c['case_error']:.3f} [{conv}] | best {self._best_objective()}")
         else:
             log(f"cand {job.cand_id:02d} {job.name} {job.status.upper()} "

@@ -2,8 +2,8 @@
   "_comment": "CW single-track 316L calibration. Thermophysical params calibrated ONCE, shared across ALL cases; only process params (P, v, radius) and geometry differ per case. Edit ranges/budget here.",
 
   "objective": {
-    "_comment": "Per case: error = mean(|depth_err|, |width_err|). Candidate objective = mean over all cases. Lower is better.",
-    "metric": "mean_abs_rel_error",
+    "_comment": "Per-case error = mean(|depth_err|, |width_err|, |ar_err|). AR = meltPoolDepth / meltPoolWidth. The aspect-ratio term penalizes compensating errors (e.g. depth+10% & width−10% fools plain mean-abs). Candidate objective = mean over all cases. Lower is better.",
+    "metric": "mean_abs_rel_error_with_ar",
     "depth_weight": 1.0,
     "width_weight": 1.0
   },
