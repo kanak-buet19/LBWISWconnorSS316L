@@ -136,11 +136,24 @@ Wiedemann-Franz correlation constraint: `compute_physics_penalty()` in `evaluate
 Progress-based (not wall-clock). A sim is killed only if `log.laserbeamFoam` stops advancing:
 - No solver output at all for `perSimStartupSec` (3600s) → killed as "no solver output"
 - Solver Time frozen for `perSimStallSec` (1800s) → killed as "solver Time stalled"
-- Slow-but-progressing sims are never killed.
+- `deltaT < minDeltaTAbort` for `minDeltaTConsecutivePolls` poll intervals → killed as "LOW_DT"
+- LOW_DT cases receive `lowDeltaTPenalty` (default 1.25), not the hard `PENALTY=9.99`
+- Slow-but-progressing sims are allowed unless `deltaT` stays below the configured floor.
 
 ## Disk cleanup
 
 `cleanup.enabled=true` keeps only the best-so-far candidate's full data (VTK + processor*/). Non-best candidates are stripped after finishing. `strip_heavy()` deletes VTK/, processor*/, and reconstructed time dirs; keeps CSV, logs, `case_build.json`, `result.json`.
+
+## Long-track validation
+
+If `longTrackValidation.enabled=true`, calibration may launch a special
+post-calibration validation stage. It runs only when the best complete candidate
+has objective <= `objectiveThreshold` (default 0.05) and the calibration logs
+show healthy timesteps (`mean deltaT >= 1e-7` or at least 80% of timesteps
+>= 1e-7 for every case). It builds a 1.5 mm scan-track version of each
+calibration case under `runs/long_track_best_cand_XX/` and runs normal
+`Allrun_long` post-processing. Progress and results are written to
+`results/long_track_status.json` and summarized in `results/status.txt`.
 
 ## Output files (results/)
 
@@ -151,6 +164,7 @@ Progress-based (not wall-clock). A sim is killed only if `log.laserbeamFoam` sto
 | `summary.csv` | Flat table suitable for quick inspection |
 | `status.json` | Live progress, including `candidate_budget` and `max_solver_runs` |
 | `status.txt` | HPC-friendly live dashboard; view with `watch -n 10 cat results/status.txt` |
+| `long_track_status.json` | Trigger decision and results for optional 1.5 mm long-track validation |
 | `plots/ranked_objective.png` | Candidates ranked by objective |
 | `plots/params_vs_objective.png` | Each param vs objective scatter |
 | `plots/best_sim_vs_exp.png` | Best candidate sim vs exp bars |

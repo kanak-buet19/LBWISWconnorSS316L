@@ -99,6 +99,16 @@
     "_comment": "Disk saver: keep ONLY the best-so-far candidate's full data (VTK + processor*/). When a candidate completes with a lower objective it becomes the new best and the previous best is stripped; every non-best candidate is stripped as soon as it finishes. The tiny post-processing CSV, logs and case_build.json are always kept, so scoring is unaffected."
   },
 
+  "longTrackValidation": {
+    "enabled": true,
+    "objectiveThreshold": 0.05,
+    "trackLength_m": 1.5e-3,
+    "deltaTThreshold": 1e-7,
+    "minMeanDeltaT": 1e-7,
+    "minFractionAboveDeltaT": 0.80,
+    "_comment": "After calibration only: if the best candidate objective is <=5% and its calibration logs have healthy timestep statistics (mean deltaT >=1e-7 OR at least 80% of deltaT values >=1e-7 for every case), run a 1.5 mm long-track validation for each calibration case using the same post-processing."
+  },
+
   "execution": {
     "coresPerSim": 8,
     "totalCores": 64,
@@ -106,6 +116,9 @@
     "pollIntervalSec": 10,
     "perSimStallSec": 1800,
     "perSimStartupSec": 3600,
-    "_watchdog": "Progress-based, not wall-clock. A sim is killed only if the solver Time stops advancing: perSimStallSec (1800s=30min) with no advance once running, or perSimStartupSec (3600s=1h) with no solver output at all after launch. Slow-but-progressing sims are NOT killed."
+    "minDeltaTAbort": 5e-8,
+    "minDeltaTConsecutivePolls": 5,
+    "lowDeltaTPenalty": 1.25,
+    "_watchdog": "Progress-based, not wall-clock. Kill a sim if no solver output appears for perSimStartupSec, solver Time stops advancing for perSimStallSec, or deltaT stays below minDeltaTAbort for minDeltaTConsecutivePolls poll intervals. LOW_DT cases get lowDeltaTPenalty instead of the hard failure penalty. Set minDeltaTAbort <= 0 to disable the low-deltaT abort."
   }
 }

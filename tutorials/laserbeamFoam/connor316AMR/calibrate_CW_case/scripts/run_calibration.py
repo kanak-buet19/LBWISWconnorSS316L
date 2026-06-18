@@ -16,6 +16,7 @@ CALIB_CORES_PER_SIM.
 from __future__ import annotations
 
 import csv
+import copy
 import json
 import os
 import re
@@ -152,6 +153,36 @@ def sim_progress(case_dir: Path) -> tuple[float, float | None] | None:
     return (t, dt) if t is not None else None
 
 
+def delta_t_stats(case_dir: Path, threshold: float) -> dict:
+    log_file = Path(case_dir) / "log.laserbeamFoam"
+    values = []
+    if log_file.exists():
+        try:
+            lines = log_file.read_text(errors="ignore").splitlines()
+        except OSError:
+            lines = []
+        for line in lines:
+            if line.startswith("deltaT = "):
+                try:
+                    values.append(float(line[9:].strip()))
+                except ValueError:
+                    pass
+    if not values:
+        return {
+            "n": 0, "mean": float("nan"), "min": float("nan"),
+            "fraction_ge_threshold": float("nan"), "threshold": threshold,
+        }
+    return {
+        "n": len(values),
+        "mean": sum(values) / len(values),
+        "min": min(values),
+        "fraction_ge_threshold": (
+            sum(1 for v in values if v >= threshold) / len(values)
+        ),
+        "threshold": threshold,
+    }
+
+
 def fmt_params(p: dict) -> str:
     parts = []
     for k, v in p.items():
@@ -201,6 +232,7 @@ class Job:
         self.started = None
         self.last_sim_t: float | None = None   # latest solver Time seen
         self.last_advance = None               # wall time of last progress
+        self.low_dt_count = 0
         self.status = "queued"   # queued|running|done|aborted|failed|cancelled
         self.note = ""
         self.result: dict | None = None
@@ -269,6 +301,16 @@ class Calibrator:
         # advancing (a real hang/divergence), not just because it is slow.
         self.stall_timeout = ex.get("perSimStallSec", 1800)     # no advance -> kill
         self.startup_grace = ex.get("perSimStartupSec", 3600)   # no solver output -> kill
+        self.min_delta_t = float(ex.get("minDeltaTAbort", 5e-8))
+        self.min_delta_t_polls = positive_int(
+            ex.get("minDeltaTConsecutivePolls", 5),
+            "execution.minDeltaTConsecutivePolls",
+        )
+        self.low_delta_t_penalty = float(ex.get("lowDeltaTPenalty", 1.25))
+
+        self.long_track = cfg.get("longTrackValidation", {})
+        self.long_track_enabled = bool(self.long_track.get("enabled", True))
+        self.long_track_status: dict | None = None
 
         # Bayesian optimization: total evaluation budget + LHS init size
         opt = cfg["optimizer"]
@@ -559,6 +601,27 @@ class Calibrator:
                     if job.last_sim_t is None or pr[0] > job.last_sim_t:
                         job.last_sim_t = pr[0]
                         job.last_advance = now
+                    dt = pr[1]
+                    if self.min_delta_t > 0 and dt is not None and dt < self.min_delta_t:
+                        job.low_dt_count += 1
+                    else:
+                        job.low_dt_count = 0
+                    if job.low_dt_count >= self.min_delta_t_polls:
+                        job.kill()
+                        job.status = "low_dt"
+                        job.note = (
+                            f"deltaT {dt:.3e} < {self.min_delta_t:.3e} "
+                            f"for {job.low_dt_count} polls"
+                        )
+                        log(f"cand {job.cand_id:02d} {job.name} LOW_DT "
+                            f"({job.note}; last t={job.last_sim_t})")
+                        self._record_job(
+                            job, evaluate=False,
+                            case_error=self.low_delta_t_penalty,
+                        )
+                        self.maybe_enqueue_next(job)
+                        self.done_count += 1
+                        continue
                 if job.last_sim_t is None:
                     window, why = self.startup_grace, "no solver output"
                 else:
@@ -586,9 +649,12 @@ class Calibrator:
             self.done_count += 1
         self.running = still
 
-    def _record_job(self, job: Job, evaluate: bool) -> None:
+    def _record_job(self, job: Job, evaluate: bool,
+                    case_error: float | None = None) -> None:
         rec = self.records[job.cand_id]
         entry = {"status": job.status, "note": job.note}
+        if case_error is not None:
+            entry["case_error"] = case_error
         if evaluate:
             try:
                 res = job.evaluate(self.stability_tol)
@@ -612,7 +678,7 @@ class Calibrator:
     @staticmethod
     def _terminal_case(entry: dict) -> bool:
         return entry.get("status") in (
-            "done", "aborted", "failed", "cancelled", "skipped",
+            "done", "aborted", "low_dt", "failed", "cancelled", "skipped",
             "skipped_after_failure",
         )
 
@@ -687,7 +753,7 @@ class Calibrator:
         bad_status = any(c.get("status") in ("failed", "cancelled", "skipped_after_failure")
                          for c in rec["cases"].values())
         errs = [c.get("case_error") for c in rec["cases"].values()
-                if c.get("status") in ("done", "aborted")
+                if c.get("status") in ("done", "aborted", "low_dt")
                 and c.get("case_error") == c.get("case_error")
                 and c.get("case_error") is not None]
         n_expected = len(self.cases)
@@ -744,6 +810,193 @@ class Calibrator:
         b = self._best_record()
         return f"{b['objective']:.3f}(#{b['id']:02d})" if b else "n/a"
 
+    # -- long-track validation --------------------------------------------- #
+    def _best_dt_health(self, best: dict) -> tuple[bool, dict]:
+        threshold = float(self.long_track.get("deltaTThreshold", 1e-7))
+        min_mean = float(self.long_track.get("minMeanDeltaT", 1e-7))
+        min_fraction = float(self.long_track.get("minFractionAboveDeltaT", 0.80))
+        per_case = {}
+        healthy = True
+
+        for case in self.cases:
+            case_dir = self._cand_dir(best["id"]) / case["name"]
+            stats = delta_t_stats(case_dir, threshold)
+            mean_ok = stats["mean"] == stats["mean"] and stats["mean"] >= min_mean
+            frac_ok = (
+                stats["fraction_ge_threshold"] == stats["fraction_ge_threshold"]
+                and stats["fraction_ge_threshold"] >= min_fraction
+            )
+            ok = stats["n"] > 0 and (mean_ok or frac_ok)
+            stats.update({"mean_ok": mean_ok, "fraction_ok": frac_ok, "ok": ok})
+            per_case[case["name"]] = stats
+            healthy = healthy and ok
+
+        return healthy, {
+            "threshold": threshold,
+            "min_mean": min_mean,
+            "min_fraction": min_fraction,
+            "cases": per_case,
+        }
+
+    def _long_track_case_cfg(self, case_cfg: dict) -> tuple[dict, dict]:
+        track_length = float(self.long_track.get("trackLength_m", 1.5e-3))
+        v = case_cfg["v_scan_mm_s"] / 1000.0
+        control = copy.deepcopy(self.control)
+        control["endTime"] = track_length / v
+        out_case = copy.deepcopy(case_cfg)
+        out_case["name"] = f"{case_cfg['name']}_longTrack_1p5mm"
+        out_case["_long_track_source_case"] = case_cfg["name"]
+        out_case["_long_track_length_m"] = track_length
+        return out_case, control
+
+    def _record_long_job(self, job: Job, evaluate: bool) -> dict:
+        entry = {
+            "case": job.name,
+            "status": job.status,
+            "note": job.note,
+            "case_dir": str(job.case_dir),
+            "delta_t_stats": delta_t_stats(
+                job.case_dir,
+                float(self.long_track.get("deltaTThreshold", 1e-7)),
+            ),
+        }
+        if evaluate:
+            try:
+                res = job.evaluate(self.stability_tol)
+                entry.update({k: v for k, v in res.items() if k != "series"})
+            except Exception as exc:
+                entry["note"] = f"eval failed: {exc}"
+        return entry
+
+    def _poll_long_jobs(self, running: list[Job], records: list[dict]) -> list[Job]:
+        still = []
+        for job in running:
+            rc = job.proc.poll()
+            if rc is None and job.started:
+                now = time.time()
+                pr = sim_progress(job.case_dir)
+                if pr is not None and pr[0] is not None:
+                    if job.last_sim_t is None or pr[0] > job.last_sim_t:
+                        job.last_sim_t = pr[0]
+                        job.last_advance = now
+                    dt = pr[1]
+                    if self.min_delta_t > 0 and dt is not None and dt < self.min_delta_t:
+                        job.low_dt_count += 1
+                    else:
+                        job.low_dt_count = 0
+                    if job.low_dt_count >= self.min_delta_t_polls:
+                        job.kill()
+                        job.status = "low_dt"
+                        job.note = (
+                            f"deltaT {dt:.3e} < {self.min_delta_t:.3e} "
+                            f"for {job.low_dt_count} polls"
+                        )
+                        records.append(self._record_long_job(job, evaluate=False))
+                        continue
+                if job.last_sim_t is None:
+                    window, why = self.startup_grace, "no solver output"
+                else:
+                    window, why = self.stall_timeout, "solver Time stalled"
+                if now - (job.last_advance or job.started) > window:
+                    job.kill()
+                    job.status = "failed"
+                    job.note = f"{why} > {window}s"
+                    records.append(self._record_long_job(job, evaluate=False))
+                    continue
+            if rc is None:
+                still.append(job)
+                continue
+            job.status = "done" if rc == 0 else "failed"
+            if rc != 0:
+                job.note = f"exit {rc}"
+            records.append(self._record_long_job(job, evaluate=(job.status == "done")))
+        return still
+
+    def _maybe_run_long_track(self, best: dict | None) -> None:
+        if not self.long_track_enabled:
+            return
+
+        threshold = float(self.long_track.get("objectiveThreshold", 0.05))
+        status = {
+            "enabled": True,
+            "started_at": datetime.now().isoformat(timespec="seconds"),
+            "state": "skipped",
+            "reason": "",
+            "objective_threshold": threshold,
+            "track_length_m": float(self.long_track.get("trackLength_m", 1.5e-3)),
+            "best_candidate_id": best["id"] if best else None,
+            "best_objective": best["objective"] if best else None,
+            "dt_health": None,
+            "jobs": [],
+        }
+        self.long_track_status = status
+
+        if not best:
+            status["reason"] = "no complete candidate"
+            self._write_status()
+            (RESULTS / "long_track_status.json").write_text(
+                json.dumps(status, indent=2, default=str))
+            return
+        if best["objective"] > threshold:
+            status["reason"] = (
+                f"best objective {best['objective']:.4f} > {threshold:.4f}"
+            )
+            self._write_status()
+            (RESULTS / "long_track_status.json").write_text(
+                json.dumps(status, indent=2, default=str))
+            return
+
+        dt_ok, dt_health = self._best_dt_health(best)
+        status["dt_health"] = dt_health
+        if not dt_ok:
+            status["reason"] = "best candidate timestep health failed"
+            self._write_status()
+            (RESULTS / "long_track_status.json").write_text(
+                json.dumps(status, indent=2, default=str))
+            return
+
+        base = RUNS / f"long_track_best_cand_{best['id']:02d}"
+        jobs = []
+        for case_cfg in self.cases:
+            long_case, long_control = self._long_track_case_cfg(case_cfg)
+            case_dir = base / long_case["name"]
+            rec = caselib.build_case(
+                TEMPLATE, case_dir, best["params"], long_case,
+                self.geom, long_control, self.cores_per_sim)
+            jobs.append(Job(
+                best["id"], best["params"], long_case, case_dir,
+                {"surface_y_um": rec["surface_y_um"]}))
+
+        status["state"] = "running"
+        status["reason"] = "criteria passed"
+        running = []
+        queue = jobs[:]
+        finished = []
+        while queue or running:
+            while queue and len(running) < self.max_parallel:
+                job = queue.pop(0)
+                job.start()
+                running.append(job)
+                log(f"long-track cand {best['id']:02d} {job.name} START")
+
+            running = self._poll_long_jobs(running, finished)
+            status["updated_at"] = datetime.now().isoformat(timespec="seconds")
+            status["running"] = [j.name for j in running]
+            status["queued"] = [j.name for j in queue]
+            status["jobs"] = finished
+            self._write_status()
+            (RESULTS / "long_track_status.json").write_text(
+                json.dumps(status, indent=2, default=str))
+            if queue or running:
+                time.sleep(self.poll)
+
+        status["state"] = "complete"
+        status["completed_at"] = datetime.now().isoformat(timespec="seconds")
+        status["jobs"] = finished
+        (RESULTS / "long_track_status.json").write_text(
+            json.dumps(status, indent=2, default=str))
+        self._write_status()
+
     # -- output ------------------------------------------------------------ #
     def _case_status_counts(self) -> dict[str, int]:
         counts: dict[str, int] = {}
@@ -784,6 +1037,7 @@ class Calibrator:
             "delta_t": dt,
             "wall_elapsed": now - job.started if job.started else None,
             "idle": now - (job.last_advance or job.started) if job.started else None,
+            "low_dt_count": job.low_dt_count,
             "last_measure_time": latest.get("time"),
             "depth": latest.get("depth"),
             "width": latest.get("width"),
@@ -868,7 +1122,8 @@ class Calibrator:
                 lines.append(
                     f"  cand {snap['candidate']:02d} {snap['case']}: "
                     f"{pct}% t={t} dt={dt} wall={fmt_duration(snap['wall_elapsed'])} "
-                    f"idle={fmt_duration(snap['idle'])} latest_mp_t={mt} "
+                    f"idle={fmt_duration(snap['idle'])} low_dt={snap['low_dt_count']}/{self.min_delta_t_polls} "
+                    f"latest_mp_t={mt} "
                     f"d={d}um w={w}um"
                 )
                 if snap["note"]:
@@ -918,6 +1173,31 @@ class Calibrator:
         else:
             lines.append("  none yet")
 
+        if self.long_track_status is not None:
+            lt = self.long_track_status
+            lines.append("")
+            lines.append("Long-track validation")
+            lines.append(f"  state: {lt.get('state')}")
+            lines.append(f"  reason: {lt.get('reason', '')}")
+            lines.append(f"  best_candidate: {lt.get('best_candidate_id')}")
+            lines.append(f"  best_objective: {fmt_value(lt.get('best_objective'), '.4f')}")
+            lines.append(f"  track_length_m: {fmt_value(lt.get('track_length_m'), '.4e')}")
+            running = lt.get("running", [])
+            queued = lt.get("queued", [])
+            if running:
+                lines.append(f"  running: {', '.join(running)}")
+            if queued:
+                lines.append(f"  queued: {', '.join(queued)}")
+            jobs = lt.get("jobs", [])
+            if jobs:
+                lines.append("  jobs:")
+                for job in jobs:
+                    err = fmt_value(job.get("case_error"), ".4f")
+                    lines.append(
+                        f"    {job.get('case')}: {job.get('status')} "
+                        f"err={err} {job.get('note', '')}"
+                    )
+
         (RESULTS / "status.txt").write_text("\n".join(lines) + "\n")
 
     def _write_status(self) -> None:
@@ -961,6 +1241,7 @@ class Calibrator:
 
         plots.make_all(self.records, best, self.param_names, RESULTS / "plots")
         self._write_status()
+        self._maybe_run_long_track(best)
         log(f"done. results in {RESULTS}")
         if self.cancelled:
             log("NOTE: run was cancelled - results are partial (see status.json).")
