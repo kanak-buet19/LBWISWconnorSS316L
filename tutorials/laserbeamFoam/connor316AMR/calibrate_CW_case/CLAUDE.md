@@ -55,7 +55,7 @@ results/                         ← generated: summary.csv, summary.json, best_
 4. `Allrun_long` runs OpenFOAM, calls `analyze_meltpool_vtu.py` after each written timestep → appends to `post-processing-data/vtu_meltpool_geometry.csv`
 5. `evaluate.py` reads that CSV, finds the longest stable tail (variation < `stabilityTol`), computes `case_error = mean(|depth_err|, |width_err|, |ar_err|)` where `ar_err` = aspect-ratio error (depth/width vs exp) — prevents compensating errors (e.g. depth+10%/width−10%) from scoring well
 6. Early abort: if pool has stabilized AND error > 50%, sim is killed immediately
-7. Candidate runs BOTH cases; `candidate_objective = mean(case_errors) + physics_penalty`. Physics penalty = Wiedemann-Franz constraint: penalizes kappa_liquid > L·T/ρ_elec.
+7. Candidate runs BOTH cases; `candidate_objective = mean(case_errors)`. Electrical resistivity and liquid kappa are not coupled in the objective.
 8. `BOOptimizer.tell()` → feeds result back; TPE proposes smarter next candidates
 9. On completion: `best_params.json` written, plots generated
 
@@ -67,8 +67,8 @@ Candidates persist via `runs/cand_XX/result.json`. On resubmit, completed candid
 
 | Field | Where | Purpose |
 |---|---|---|
-| `optimizer.nSamples` | config | Candidate/parameter-set budget (default 48); max solver runs are `nSamples × number_of_cases` |
-| `optimizer.initSamples` | config | LHS exploration phase size (default 16) |
+| `optimizer.nSamples` | config | Candidate/parameter-set budget (default 224); max solver runs are `nSamples × number_of_cases` |
+| `optimizer.initSamples` | config | LHS exploration phase size (default 32) |
 | `execution.coresPerSim` / `totalCores` | config | Parallelism; override with env vars |
 | `earlyAbort.errorThreshold` | config | Kill stabilized-but-bad sims at this error fraction |
 | `earlyAbort.stabilityTol` | config | Pool is "stable" when (max-min)/mean < this over tail |
@@ -113,9 +113,9 @@ Solid and liquid property ranges are now independent — prevents optimizer from
 
 - `LeeCoeff` — volumetric evaporation strength, 0–5e6 1/s
 
-### Physics penalty
+### Resistivity and liquid kappa
 
-Wiedemann-Franz correlation constraint: `compute_physics_penalty()` in `evaluate.py` penalizes candidates where BOTH elec_resistivity AND kappa_liquid are high — a physically contradictory compensation (same scattering mechanisms that increase ρ MUST decrease κ). Uses nominal reference point (ρ_ref=7e-7, κ_ref=26.9) with 10 W/m/K lattice allowance. Weight 0.05, max penalty ~0.01 (soft tiebreaker, doesn't dominate).
+`elec_resistivity` controls the laser absorption model, while `kappa_liquid_value` is the total/effective thermal conductivity used by the heat solver. They are calibrated independently; no Wiedemann-Franz objective penalty is applied.
 
 `_sub_entry` patches scalar fields by regex. If you add a new parameter, you must add a patcher call in `patch_transportProperties`.
 

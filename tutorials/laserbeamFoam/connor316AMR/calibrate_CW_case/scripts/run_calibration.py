@@ -764,13 +764,7 @@ class Calibrator:
             rec["objective"] = PENALTY
         elif errs:
             case_obj = sum(errs) / len(errs)
-            # Add Wiedemann-Franz physics penalty (only when all cases scored)
-            phys = 0.0
-            if n_have >= n_expected:
-                phys = ev.compute_physics_penalty(
-                    rec["params"], self.cfg.get("physicsPenalty"))
-                rec["physics_penalty"] = phys
-            rec["objective"] = case_obj + phys
+            rec["objective"] = case_obj
         elif n_have >= n_expected:
             rec["objective"] = PENALTY
         # status summary
@@ -1100,9 +1094,6 @@ class Calibrator:
         lines.append("Best complete candidate")
         if best:
             lines.append(f"  cand {best['id']:02d}: objective {best['objective']:.4f}; status {best['status']}")
-            phys = best.get("physics_penalty")
-            if phys == phys and phys is not None:
-                lines.append(f"  physics_penalty: {phys:.4g}")
             lines.append(f"  cases: {self._format_case_summary(best)}")
             lines.append(f"  params: {fmt_params(best['params'])}")
         else:
@@ -1247,7 +1238,7 @@ class Calibrator:
             log("NOTE: run was cancelled - results are partial (see status.json).")
 
     def _write_summary_csv(self) -> None:
-        cols = ["id", "status", "objective", "physics_penalty"] + self.param_names
+        cols = ["id", "status", "objective"] + self.param_names
         for case in self.cases:
             nm = case["name"]
             cols += [f"{nm}__status", f"{nm}__sim_depth_um", f"{nm}__sim_width_um",
@@ -1257,8 +1248,7 @@ class Calibrator:
             w = csv.writer(fh)
             w.writeheader() if False else w.writerow(cols)
             for r in self.records:
-                row = [r["id"], r["status"], r["objective"],
-                       r.get("physics_penalty", "")]
+                row = [r["id"], r["status"], r["objective"]]
                 row += [r["params"][p] for p in self.param_names]
                 for case in self.cases:
                     c = r["cases"].get(case["name"], {})

@@ -2,7 +2,7 @@
   "_comment": "CW single-track 316L calibration. Thermophysical params calibrated ONCE, shared across ALL cases; only process params (P, v, radius) and geometry differ per case. Edit ranges/budget here. Two validation cases with different energy density improve parameter identifiability.",
 
   "objective": {
-    "_comment": "Per-case error = mean(|depth_err|, |width_err|, |ar_err|). AR = meltPoolDepth / meltPoolWidth. The aspect-ratio term penalizes compensating errors (e.g. depth+10% & width−10% fools plain mean-abs). Candidate objective = mean over all cases + physicsPenalty. Lower is better.",
+    "_comment": "Per-case error = mean(|depth_err|, |width_err|, |ar_err|). AR = meltPoolDepth / meltPoolWidth. The aspect-ratio term penalizes compensating errors (e.g. depth+10% & width−10% fools plain mean-abs). Candidate objective = mean over all cases. Lower is better.",
     "metric": "mean_abs_rel_error_with_ar",
     "depth_weight": 1.0,
     "width_weight": 1.0
@@ -10,19 +10,19 @@
 
   "optimizer": {
     "method": "bo_tpe",
-    "nSamples": 48,
-    "initSamples": 16,
+    "nSamples": 224,
+    "initSamples": 32,
     "seed": 42,
-    "_comment": "Bayesian optimization (Optuna TPE). nSamples = total candidate budget (48 parameter sets). Each candidate can run BOTH validation cases, so the solver-run budget can be up to nSamples × number of cases. First initSamples (16) are a Latin-Hypercube design for exploration; after that the TPE surrogate proposes where melt-pool error is likely lower. Proposals stream in batches up to maxParallel (constant-liar keeps a batch diversified). Lower objective is better."
+    "_comment": "Bayesian optimization (Optuna TPE). nSamples = total candidate budget (224 parameter sets). Each candidate can run BOTH validation cases, so the solver-run budget can be up to nSamples × number of cases. First initSamples (32) are a Latin-Hypercube design for exploration; after that the TPE surrogate proposes where melt-pool error is likely lower. Proposals stream in batches up to maxParallel (constant-liar keeps a batch diversified). Lower objective is better."
   },
 
   "parameters": {
-    "_comment": "Shared 316L thermophysical knobs. Solid cp/kappa have narrow ranges (well-known from DSC); liquid values are direct at Tliquidus=1723K (uncertain). Marangoni derived: sigma × dSigmadT_norm (physically coupled). Wiedemann-Franz penalty prevents unphysical kappa_liq > L·T/ρ_elec combinations.",
+    "_comment": "Shared 316L thermophysical knobs. Solid cp/kappa have narrow ranges (well-known from DSC); liquid values are direct at Tliquidus=1723K (uncertain). Marangoni derived: sigma × dSigmadT_norm (physically coupled). Electrical resistivity and liquid thermal conductivity are calibrated independently.",
     "elec_resistivity":   {"type": "scalar", "baseline": 7.0e-7,  "min": 5.0e-7,   "max": 9.0e-7,    "_units": "ohm·m"},
     "cp_solid_scale":     {"type": "scale",  "baseline": 1.0,     "min": 0.97,     "max": 1.03,      "_units": "-", "_note": "Multiplicative on solid cp table (T ≤ Tsolidus=1658K). Solid cp well-known from DSC (±3%)."},
     "kappa_solid_scale":  {"type": "scale",  "baseline": 1.0,     "min": 0.95,     "max": 1.05,      "_units": "-", "_note": "Multiplicative on solid kappa table (T ≤ Tsolidus)."},
     "cp_liquid_value":    {"type": "scalar", "baseline": 790.0,   "min": 700.0,    "max": 900.0,     "_units": "J/kg/K", "_note": "cp at Tliquidus=1723K. Set directly (not scaled from solid)."},
-    "kappa_liquid_value": {"type": "scalar", "baseline": 26.9,    "min": 18.0,     "max": 38.0,      "_units": "W/m/K", "_note": "kappa at Tliquidus=1723K. Must satisfy WF: k_liq ≤ L·T/ρ_elec (penalized if violated)."},
+    "kappa_liquid_value": {"type": "scalar", "baseline": 26.9,    "min": 18.0,     "max": 38.0,      "_units": "W/m/K", "_note": "Total/effective kappa at Tliquidus=1723K; calibrated independently from elec_resistivity."},
     "cp_liquid_slope":    {"type": "slope",  "baseline": 0.0,     "min": -0.02,    "max": 0.02,      "_units": "J/kg/K/K", "_note": "Narrow: ±28 J/kg/K at Tvap (±3.5% of nominal 790)."},
     "kappa_liquid_slope": {"type": "slope",  "baseline": 0.0,     "min": -0.005,   "max": 0.005,     "_units": "W/m/K/K", "_note": "Narrow: ±7 W/m/K at Tvap (±26% of nominal 26.9)."},
     "rho":                {"type": "scalar", "baseline": 7950.0,  "min": 7155.0,   "max": 8745.0,    "_units": "kg/m3"},
@@ -33,12 +33,6 @@
     "sigma":              {"type": "scalar", "baseline": 1.87,    "min": 1.5,      "max": 2.1,       "_units": "N/m"},
     "dSigmadT_norm":      {"type": "scalar", "baseline": -2.62e-4,"min": -5.5e-4,  "max": -1.0e-4,   "_units": "K^-1", "_note": "Normalized dσ/dT = (1/σ)(dσ/dT). Marangoni_Constant = sigma × dSigmadT_norm. Literature for 316L: |dσ/dT|/σ ≈ 2-3×10⁻⁴ K⁻¹."},
     "LeeCoeff":           {"type": "scalar", "baseline": 1e5,     "min": 0.0,      "max": 5e6,       "_units": "1/s"}
-  },
-
-  "physicsPenalty": {
-    "enabled": true,
-    "weight": 0.05,
-    "_comment": "Wiedemann-Franz correlation constraint: penalizes when optimizer picks BOTH high elec_resistivity (less absorption → shallower pool) AND high kappa_liquid (more conduction → deeper pool). These compensate in error but are physically contradictory — same scattering mechanisms that increase ρ MUST decrease κ. Expected κ at given ρ = κ_ref × (ρ_ref/ρ) + 10. weight=0.05 means worst violation adds ~0.01 to objective (typical case error ~0.05-0.20)."
   },
 
   "geometry": {

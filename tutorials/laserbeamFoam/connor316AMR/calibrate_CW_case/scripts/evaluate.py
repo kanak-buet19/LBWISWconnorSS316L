@@ -110,42 +110,6 @@ def evaluate(case_dir: Path, exp_depth_um: float, exp_width_um: float,
     }
 
 
-def compute_physics_penalty(params: dict, config: dict | None = None) -> float:
-    """Wiedemann-Franz correlation penalty.
-
-    For metals, electronic thermal conductivity scales as κ_e ∝ 1/ρ_elec:
-    the same electron-scattering mechanisms that increase electrical resistivity
-    MUST decrease electronic thermal conductivity.
-
-    This penalty fires when the optimizer picks BOTH high ρ_elec (reducing
-    absorption → shallower pool) AND high kappa_liquid (increasing conduction →
-    deeper pool) — a physically contradictory compensation that might fit the
-    calibration data but will fail under different process conditions.
-
-    Reference point: nominal 316L values (ρ_ref=7e-7 Ω·m, κ_ref=26.9 W/m/K).
-    Allowed κ at a given ρ = κ_ref × (ρ_ref / ρ_elec) + κ_lattice_max.
-    """
-    if config and not config.get("enabled", True):
-        return 0.0
-    weight = config.get("weight", 0.05) if config else 0.05
-
-    RHO_REF = 7e-7         # Ω·m, nominal 316L at Tmelt
-    K_REF = 26.9            # W/m/K, nominal total κ at Tliquidus
-    K_LATTICE_MAX = 10.0    # W/m/K, generous upper bound for phonon contribution
-
-    rho_elec = params.get("elec_resistivity", RHO_REF)
-    kappa_liq = params.get("kappa_liquid_value", K_REF)
-
-    # Expected electronic κ from WF scaling about the reference point
-    k_e_expected = K_REF * (RHO_REF / max(rho_elec, 1e-12))
-    # Maximum physically plausible total κ at this ρ_elec
-    k_max_allowed = k_e_expected + K_LATTICE_MAX
-
-    if kappa_liq > k_max_allowed:
-        return weight * (kappa_liq - k_max_allowed) / k_max_allowed
-    return 0.0
-
-
 def should_abort(case_dir: Path, exp_depth_um: float, exp_width_um: float,
                  error_threshold: float, stability_tol: float,
                  min_points: int) -> tuple[bool, str]:
