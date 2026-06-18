@@ -143,69 +143,111 @@ def patch_LaserProperties(path: Path, radius_m: float) -> None:
 
 
 def patch_decomposeParDict(path: Path, cores: int) -> None:
-    t = re.sub(r"(numberOfSubdomains\s+)\d+;", rf"\g<1>{cores};",
-               path.read_text(), count=1)
+    t, n = re.subn(r"(numberOfSubdomains\s+)\d+;", rf"\g<1>{cores};",
+                   path.read_text(), count=1)
+    if n == 0:
+        raise ValueError(f"entry 'numberOfSubdomains' not found in {path}")
     path.write_text(t)
 
 
-def _scale_table(text: str, name: str, factor: float) -> str:
-    # allow an inline comment between the table name and its opening paren
+T_SOLIDUS = 1658.0
+T_LIQUIDUS = 1723.0
+
+
+def _scale_solid_table(text: str, name: str, factor: float) -> str:
+    """Scale solid-phase table entries (T <= Tsolidus) by factor.
+
+    Liquid entries (T > Tsolidus) are left untouched — they will be set
+    directly by _set_liquid_table afterwards.
+    """
     m = re.search(rf"({name}[^\n]*\n\s*\()(.*?)(\n\s*\)\s*;)", text, re.S)
     if not m:
         raise ValueError(f"table '{name}' not found")
-    body = re.sub(
-        r"\(\s*([0-9.eE+-]+)\s+([0-9.eE+-]+)\s*\)",
-        lambda mm: f"({mm.group(1)}    {g(float(mm.group(2)) * factor)})",
-        m.group(2),
-    )
-    return text[:m.start()] + m.group(1) + body + m.group(3) + text[m.end():]
-
-
-def _apply_liquid_slope(text: str, name: str, T_liq: float,
-                        slope: float, T_cap: float = 3122.0) -> str:
-    """Add linear slope dX/dT to liquid-phase (T >= T_liq) table entries.
-
-    Applied AFTER _scale_table so the slope is additive on top of the scaled
-    liquid base value.  Values above T_cap (Tvap) are pinned to the T_cap
-    delta so the far-field extrapolation stays physical.
-    """
-    if slope == 0.0:
-        return text
-    m = re.search(rf"({name}[^\n]*\n\s*\()(.*?)(\n\s*\)\s*;)", text, re.S)
-    if not m:
-        raise ValueError(f"table '{name}' not found for liquid-slope patch")
+    n_rows = 0
 
     def _row(mm: re.Match) -> str:
+        nonlocal n_rows
         T = float(mm.group(1))
         val = float(mm.group(2))
-        if T >= T_liq:
-            T_eff = min(T, T_cap)
-            val += slope * (T_eff - T_liq)
+        if T <= T_SOLIDUS:
+            val *= factor
+            n_rows += 1
         return f"({mm.group(1)}    {g(val)})"
 
     body = re.sub(r"\(\s*([0-9.eE+-]+)\s+([0-9.eE+-]+)\s*\)", _row, m.group(2))
+    if n_rows == 0:
+        raise ValueError(f"table '{name}': no solid rows found (T <= {T_SOLIDUS})")
     return text[:m.start()] + m.group(1) + body + m.group(3) + text[m.end():]
 
 
-def patch_transportProperties(path: Path, params: dict) -> None:
+def _set_liquid_table(text: str, name: str, value: float,
+                       slope: float = 0.0, T_cap: float = 3122.0) -> str:
+    """Set liquid-phase table entries (T >= Tliquidus) to value + slope*(T-Tliquidus).
+
+    Values above T_cap (Tvap_atm) are pinned to the T_cap delta so the
+    far-field extrapolation stays bounded.
+    """
+    m = re.search(rf"({name}[^\n]*\n\s*\()(.*?)(\n\s*\)\s*;)", text, re.S)
+    if not m:
+        raise ValueError(f"table '{name}' not found for liquid-value patch")
+    n_rows = 0
+
+    def _row(mm: re.Match) -> str:
+        nonlocal n_rows
+        T = float(mm.group(1))
+        if T >= T_LIQUIDUS:
+            n_rows += 1
+            T_eff = min(T, T_cap)
+            val = value + slope * (T_eff - T_LIQUIDUS)
+            return f"({mm.group(1)}    {g(val)})"
+        return mm.group(0)
+
+    body = re.sub(r"\(\s*([0-9.eE+-]+)\s+([0-9.eE+-]+)\s*\)", _row, m.group(2))
+    if n_rows == 0:
+        raise ValueError(f"table '{name}': no liquid rows found (T >= {T_LIQUIDUS})")
+    return text[:m.start()] + m.group(1) + body + m.group(3) + text[m.end():]
+
+
+def patch_transportProperties(path: Path, params: dict,
+                               v_scan_mm_s: float = 900.0) -> None:
+    """Patch candidate thermophysical parameters into transportProperties.
+
+    Marangoni_Constant is derived from sigma × dSigmadT_norm (physically
+    coupled — prevents optimizer from picking unrealistic dσ/dT ratios).
+    Solid cp/kappa are scaled by narrow solid_scale factors (well-known from
+    DSC). Liquid cp/kappa are set directly at Tliquidus plus a narrow slope.
+    V_scan is patched per-case.
+    """
     t = path.read_text()
+
+    # -- scalars -----------------------------------------------------------
     t = _sub_entry(t, "elec_resistivity", g(params["elec_resistivity"]))
     t = _sub_entry(t, "beta_r", g(params["beta_r"]))
     t = _sub_entry(t, "sigma", g(params["sigma"]))
-    t = _sub_entry(t, "Marangoni_Constant", g(params["Marangoni_Constant"]))
+    marangoni = params["sigma"] * params["dSigmadT_norm"]
+    t = _sub_entry(t, "Marangoni_Constant", g(marangoni))
     t = _sub_entry(t, "LatentHeatVap", g(params["LatentHeatVap"]))
+    t = _sub_entry(t, "LeeCoeff", g(params["LeeCoeff"]))
     # metal rho only (gas rho = 1, no collision with baseline 7950)
     t = re.sub(r"(\brho\s+)7950(\.\d+)?\b", rf"\g<1>{g(params['rho'])}", t, count=1)
     # metal nu first (gas nu is 1.48e-05, comes after metal block)
     t = re.sub(r"(\bnu\s+)7e-7\b", rf"\g<1>{g(params['nu'])}", t, count=1)
     # LatentHeat (fusion): requires trailing whitespace to avoid matching LatentHeatVap
     t = _sub_entry(t, "LatentHeat", g(params["LatentHeat"]))
-    # scale entire cp/kappa tables then add liquid slope on top
-    t = _scale_table(t, "table_cp", params["cp_scale"])
-    t = _scale_table(t, "table_kappa", params["kappa_scale"])
-    T_LIQ = 1723.0
-    t = _apply_liquid_slope(t, "table_kappa", T_LIQ, params["kappa_liquid_slope"])
-    t = _apply_liquid_slope(t, "table_cp",    T_LIQ, params["cp_liquid_slope"])
+
+    # -- cp / kappa tables --------------------------------------------------
+    # 1. Scale SOLID entries only (narrow range — well-known from DSC)
+    t = _scale_solid_table(t, "table_cp",    params["cp_solid_scale"])
+    t = _scale_solid_table(t, "table_kappa", params["kappa_solid_scale"])
+    # 2. Set LIQUID entries directly (value at Tliquidus + narrow slope)
+    t = _set_liquid_table(t, "table_kappa", params["kappa_liquid_value"],
+                           params["kappa_liquid_slope"])
+    t = _set_liquid_table(t, "table_cp",    params["cp_liquid_value"],
+                           params["cp_liquid_slope"])
+
+    # -- case-specific scan speed -------------------------------------------
+    t = _sub_entry(t, "V_scan", g(v_scan_mm_s / 1000.0))
+
     path.write_text(t)
 
 
@@ -239,7 +281,8 @@ def build_case(template_dir: Path, dest: Path, candidate_params: dict,
                            case_cfg["P_laser_W"], geo["end_time"])
     patch_trackProperties(dest / "constant" / "trackProperties", geo["end_time"])
     patch_LaserProperties(dest / "constant" / "LaserProperties", case_cfg["laserRadius_m"])
-    patch_transportProperties(dest / "constant" / "transportProperties", candidate_params)
+    patch_transportProperties(dest / "constant" / "transportProperties",
+                             candidate_params, case_cfg["v_scan_mm_s"])
 
     record = {"case": case_cfg, "geometry": geo, "params": candidate_params,
               "cores": cores, "surface_y_um": geom["surface_y_um"]}

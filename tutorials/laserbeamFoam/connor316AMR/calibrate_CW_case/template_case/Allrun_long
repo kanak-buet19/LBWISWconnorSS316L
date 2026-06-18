@@ -12,6 +12,11 @@ bParallel=true # Only set to false for debugging purposes.
 convertVTK=true # Convert written times to VTK during the solver run.
 analyzeMeltpool=true # Analyze each newly converted VTU during the solver run.
 pythonExe="${PYTHON:-/home/kanak/.venv/venv314/bin/python}"
+surfaceY="${SURFACE_Y_UM:-}"
+if [ -z "$surfaceY" ] && [ -f case_build.json ]; then
+    surfaceY=$("$pythonExe" -c 'import json; print(json.load(open("case_build.json")).get("surface_y_um", 144))' 2>/dev/null || true)
+fi
+surfaceY="${surfaceY:-144}"
 
 latestInternalVTU()
 {
@@ -46,7 +51,7 @@ postProcessWrittenTime()
         MPLCONFIGDIR="${MPLCONFIGDIR:-/tmp}" "$pythonExe" \
             scripts/analyze_meltpool_vtu.py \
             --vtk-file "$vtkFile" \
-            --surface-y-um 144 \
+            --surface-y-um "$surfaceY" \
             || { echo "[ERROR] Meltpool analysis failed for ${vtkFile}! Terminating simulation." >&4; kill 0; exit 1; }
         echo "[DEBUG] Meltpool analysis completed successfully for ${vtkFile}."
     fi

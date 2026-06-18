@@ -54,8 +54,52 @@ def log(msg: str) -> None:
     print(f"[{ts()}] {msg}", flush=True)
 
 
+def fmt_duration(seconds: float | None) -> str:
+    if seconds is None:
+        return "n/a"
+    seconds = max(0, int(seconds))
+    h, rem = divmod(seconds, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h:d}h{m:02d}m"
+    if m:
+        return f"{m:d}m{s:02d}s"
+    return f"{s:d}s"
+
+
+def fmt_value(value: object, fmt: str = ".3f", missing: str = "n/a") -> str:
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return missing
+    if out != out:
+        return missing
+    return format(out, fmt)
+
+
 def pspec_keys(pspec: dict) -> list[str]:
     return [k for k in pspec if not k.startswith("_")]
+
+
+def positive_int(value: object, name: str) -> int:
+    try:
+        out = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{name} must be a positive integer, got {value!r}") from exc
+    if out <= 0:
+        raise ValueError(f"{name} must be a positive integer, got {out}")
+    return out
+
+
+def case_surface_y(case_dir: Path) -> float | None:
+    try:
+        rec = json.loads((case_dir / "case_build.json").read_text())
+    except (OSError, ValueError):
+        return None
+    try:
+        return float(rec["surface_y_um"])
+    except (KeyError, TypeError, ValueError):
+        return None
 
 
 def run_command(case_dir: Path) -> str:
@@ -63,6 +107,10 @@ def run_command(case_dir: Path) -> str:
     shell, exactly like cw_scantrack's Allrun -> Allrun_long). Set
     CALIB_USE_APPTAINER=1 (HPC, see job_calibration.sh) to run inside the image."""
     python = os.environ.get("PYTHON", sys.executable)
+    surface_y = case_surface_y(case_dir)
+    surface_env = ""
+    if surface_y is not None:
+        surface_env = f"export SURFACE_Y_UM='{surface_y:.8g}' && "
     if os.environ.get("CALIB_USE_APPTAINER", "0") == "1":
         of_image = os.environ.get("OF2506_IMAGE", str(Path.home() / "openfoam-dev_2506.sif"))
         of_user = os.environ.get("OF2506_USER", os.environ.get("USER", "user"))
@@ -70,11 +118,13 @@ def run_command(case_dir: Path) -> str:
             f"apptainer exec --cleanenv --env USER={of_user} {of_image} "
             f"bash -lc \"source /openfoam/bash.rc && export FOAM_SIGFPE=0 && "
             f"export PYTHON='{python}' && export MPLCONFIGDIR=/tmp && "
+            f"{surface_env}"
             f"cd '{case_dir}' && ./Allrun_long > log.run 2>&1\""
         )
     return (
         f"export FOAM_SIGFPE=0 && export PYTHON='{python}' && "
-        f"export MPLCONFIGDIR=/tmp && cd '{case_dir}' && ./Allrun_long > log.run 2>&1"
+        f"export MPLCONFIGDIR=/tmp && {surface_env}"
+        f"cd '{case_dir}' && ./Allrun_long > log.run 2>&1"
     )
 
 
@@ -205,8 +255,14 @@ class Calibrator:
         self.best_kept_obj = float("inf")
 
         ex = cfg["execution"]
-        self.total_cores = int(os.environ.get("CALIB_TOTAL_CORES", ex["totalCores"]))
-        self.cores_per_sim = int(os.environ.get("CALIB_CORES_PER_SIM", ex["coresPerSim"]))
+        self.total_cores = positive_int(
+            os.environ.get("CALIB_TOTAL_CORES", ex["totalCores"]),
+            "CALIB_TOTAL_CORES",
+        )
+        self.cores_per_sim = positive_int(
+            os.environ.get("CALIB_CORES_PER_SIM", ex["coresPerSim"]),
+            "CALIB_CORES_PER_SIM",
+        )
         self.max_parallel = max(1, self.total_cores // self.cores_per_sim)
         self.poll = ex.get("pollIntervalSec", 10)
         # progress-based watchdog: kill a sim only if the solver Time stops
@@ -216,8 +272,12 @@ class Calibrator:
 
         # Bayesian optimization: total evaluation budget + LHS init size
         opt = cfg["optimizer"]
-        self.budget = int(opt["nSamples"])
-        self.n_init = int(opt.get("initSamples", min(16, self.budget)))
+        self.budget = positive_int(opt["nSamples"], "optimizer.nSamples")
+        self.n_init = positive_int(
+            opt.get("initSamples", min(16, self.budget)),
+            "optimizer.initSamples",
+        )
+        self.n_init = min(self.n_init, self.budget)
         self.seed = int(opt.get("seed", 42))
         self.opt = BOOptimizer(cfg["parameters"], self.param_names,
                                self.n_init, self.seed)
@@ -229,6 +289,7 @@ class Calibrator:
         self.done_count = 0
         self.cancelled = False
         self.started_at = datetime.now().isoformat(timespec="seconds")
+        self.started_wall = time.time()
 
         self._load_prior()
         # fresh start: lay down the Latin-Hypercube initial design
@@ -319,7 +380,7 @@ class Calibrator:
                     rec["_disposed"] = True
                 self.done_count += sum(
                     1 for c in rec["cases"].values()
-                    if c.get("status") in ("done", "aborted", "failed", "skipped"))
+                    if self._terminal_case(c))
                 obj = rec["objective"]
                 val = obj if (obj == obj and obj < PENALTY) else PENALTY
                 self.opt.replay(params, val)       # teach surrogate
@@ -387,6 +448,15 @@ class Calibrator:
             return
 
         rec = self.records[job.cand_id]
+        if job.status in ("failed", "cancelled"):
+            for case_cfg in self.cases[next_idx:]:
+                log(f"cand {job.cand_id:02d} skip {case_cfg['name']} "
+                    f"({job.name} {job.status})")
+                rec["cases"][case_cfg["name"]] = {"status": "skipped_after_failure"}
+            self._update_objective(job.cand_id)
+            self._tell_if_complete(job)
+            return
+
         # Gate on case[0] error: if first case badly off, skip ALL remaining cases
         if self.early.get("skipSecondCaseIfFirstBad", True):
             first_err = rec["cases"].get(self.cases[0]["name"], {}).get("case_error")
@@ -398,6 +468,7 @@ class Calibrator:
                         f"{self.early['errorThreshold']*100:.0f}%)")
                     rec["cases"][case_cfg["name"]] = {"status": "skipped"}
                 self._update_objective(job.cand_id)
+                self._tell_if_complete(job)
                 return
 
         self.queue.append(self.build_job(job.cand_id, self.cases[next_idx]))
@@ -405,7 +476,7 @@ class Calibrator:
     # -- main loop --------------------------------------------------------- #
     def run(self) -> None:
         RESULTS.mkdir(parents=True, exist_ok=True)
-        log(f"=== CW calibration (Bayesian): budget {self.budget} sims, "
+        log(f"=== CW calibration (Bayesian): budget {self.budget} candidates, "
             f"{self.n_init} LHS init, then TPE ===")
         log(f"cores: total={self.total_cores} perSim={self.cores_per_sim} "
             f"-> maxParallel={self.max_parallel}")
@@ -498,7 +569,7 @@ class Calibrator:
                     job.note = f"{why} > {window}s"
                     log(f"cand {job.cand_id:02d} {job.name} STALLED "
                         f"({job.note}; last t={job.last_sim_t})")
-                    self._record_job(job, evaluate=True)
+                    self._record_job(job, evaluate=False)
                     self.maybe_enqueue_next(job)
                     self.done_count += 1
                     continue
@@ -509,7 +580,7 @@ class Calibrator:
             job.status = "done" if rc == 0 else "failed"
             if rc != 0:
                 job.note = f"exit {rc}"
-            self._record_job(job, evaluate=True)
+            self._record_job(job, evaluate=(job.status in ("done", "aborted")))
             self._report_finish(job)
             self.maybe_enqueue_next(job)
             self.done_count += 1
@@ -537,6 +608,13 @@ class Calibrator:
         rec["cases"][job.name] = entry
         self._update_objective(job.cand_id)
         self._tell_if_complete(job)
+
+    @staticmethod
+    def _terminal_case(entry: dict) -> bool:
+        return entry.get("status") in (
+            "done", "aborted", "failed", "cancelled", "skipped",
+            "skipped_after_failure",
+        )
 
     def _tell_if_complete(self, job: Job) -> None:
         """Feed a finished candidate's objective back to the surrogate so the
@@ -606,19 +684,32 @@ class Calibrator:
 
     def _update_objective(self, cand_id: int) -> None:
         rec = self.records[cand_id]
+        bad_status = any(c.get("status") in ("failed", "cancelled", "skipped_after_failure")
+                         for c in rec["cases"].values())
         errs = [c.get("case_error") for c in rec["cases"].values()
-                if c.get("case_error") == c.get("case_error")
+                if c.get("status") in ("done", "aborted")
+                and c.get("case_error") == c.get("case_error")
                 and c.get("case_error") is not None]
         n_expected = len(self.cases)
         n_have = len(rec["cases"])
-        if errs:
-            rec["objective"] = sum(errs) / len(errs)
+        n_terminal = sum(1 for c in rec["cases"].values()
+                         if self._terminal_case(c))
+        if bad_status:
+            rec["objective"] = PENALTY
+        elif errs:
+            case_obj = sum(errs) / len(errs)
+            # Add Wiedemann-Franz physics penalty (only when all cases scored)
+            phys = 0.0
+            if n_have >= n_expected:
+                phys = ev.compute_physics_penalty(
+                    rec["params"], self.cfg.get("physicsPenalty"))
+                rec["physics_penalty"] = phys
+            rec["objective"] = case_obj + phys
         elif n_have >= n_expected:
             rec["objective"] = PENALTY
         # status summary
         was_complete = rec["status"] == "complete"
-        if n_have >= n_expected or any(c.get("status") == "skipped"
-                                       for c in rec["cases"].values()):
+        if n_have >= n_expected and n_terminal >= n_expected:
             rec["status"] = "complete"
         # persist on transition to complete so a resubmit can skip it
         if rec["status"] == "complete" and not was_complete:
@@ -643,7 +734,10 @@ class Calibrator:
                 f"({job.note}) | best {self._best_objective()}")
 
     def _best_record(self) -> dict | None:
-        done = [r for r in self.records if r["objective"] == r["objective"]]
+        done = [r for r in self.records
+                if r.get("status") == "complete"
+                and r["objective"] == r["objective"]
+                and r["objective"] < PENALTY]
         return min(done, key=lambda r: r["objective"]) if done else None
 
     def _best_objective(self) -> str:
@@ -651,12 +745,188 @@ class Calibrator:
         return f"{b['objective']:.3f}(#{b['id']:02d})" if b else "n/a"
 
     # -- output ------------------------------------------------------------ #
+    def _case_status_counts(self) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for rec in self.records:
+            for case in rec["cases"].values():
+                status = case.get("status", "unknown")
+                counts[status] = counts.get(status, 0) + 1
+        return counts
+
+    def _candidate_status_counts(self) -> dict[str, int]:
+        counts: dict[str, int] = {}
+        for rec in self.records:
+            status = rec.get("status", "unknown")
+            counts[status] = counts.get(status, 0) + 1
+        return counts
+
+    def _running_snapshot(self, job: Job) -> dict:
+        now = time.time()
+        pr = sim_progress(job.case_dir)
+        end = self.control["endTime"]
+        if pr is None:
+            t, dt, pct = None, None, None
+        else:
+            t, dt = pr
+            pct = 100.0 * t / end if end else None
+
+        latest = {}
+        series = ev.read_series(job.case_dir)
+        if series:
+            latest = series[-1]
+
+        return {
+            "candidate": job.cand_id,
+            "case": job.name,
+            "state": job.status,
+            "percent": pct,
+            "sim_time": t,
+            "delta_t": dt,
+            "wall_elapsed": now - job.started if job.started else None,
+            "idle": now - (job.last_advance or job.started) if job.started else None,
+            "last_measure_time": latest.get("time"),
+            "depth": latest.get("depth"),
+            "width": latest.get("width"),
+            "note": job.note,
+        }
+
+    def _format_case_summary(self, rec: dict) -> str:
+        parts = []
+        for case in self.cases:
+            name = case["name"]
+            c = rec["cases"].get(name, {})
+            status = c.get("status", "pending")
+            err = c.get("case_error")
+            if err == err and err is not None:
+                parts.append(f"{name}:{status},err={err:.3f}")
+            else:
+                parts.append(f"{name}:{status}")
+        return " | ".join(parts)
+
+    def _write_status_text(self) -> None:
+        now = datetime.now().isoformat(timespec="seconds")
+        max_solver_runs = self.budget * len(self.cases)
+        terminal_cases = sum(self._case_status_counts().values())
+        cand_counts = self._candidate_status_counts()
+        case_counts = self._case_status_counts()
+        best = self._best_record()
+        completed = cand_counts.get("complete", 0)
+
+        lines = [
+            "CW calibration status",
+            f"updated: {now}",
+            f"started: {self.started_at}",
+            f"elapsed: {fmt_duration(time.time() - self.started_wall)}",
+            f"cancelled: {self.cancelled}",
+            "",
+            "Overall",
+            f"  candidates: proposed {len(self.records)} / budget {self.budget}; complete {completed}",
+            f"  solver runs: terminal {terminal_cases} / max {max_solver_runs}; running {len(self.running)}; queued {len(self.queue)}",
+            f"  parallelism: maxParallel {self.max_parallel} = totalCores {self.total_cores} / coresPerSim {self.cores_per_sim}",
+            f"  cleanup: {'enabled' if self.cleanup_enabled else 'disabled'}; kept_full_data cand {self.best_kept_cand if self.best_kept_cand is not None else 'n/a'}",
+            "",
+            "Candidate counts",
+        ]
+
+        if cand_counts:
+            for key in sorted(cand_counts):
+                lines.append(f"  {key}: {cand_counts[key]}")
+        else:
+            lines.append("  none yet")
+
+        lines.append("")
+        lines.append("Case/job counts")
+        if case_counts:
+            for key in sorted(case_counts):
+                lines.append(f"  {key}: {case_counts[key]}")
+        else:
+            lines.append("  none yet")
+
+        lines.append("")
+        lines.append("Best complete candidate")
+        if best:
+            lines.append(f"  cand {best['id']:02d}: objective {best['objective']:.4f}; status {best['status']}")
+            phys = best.get("physics_penalty")
+            if phys == phys and phys is not None:
+                lines.append(f"  physics_penalty: {phys:.4g}")
+            lines.append(f"  cases: {self._format_case_summary(best)}")
+            lines.append(f"  params: {fmt_params(best['params'])}")
+        else:
+            lines.append("  n/a")
+
+        lines.append("")
+        lines.append("Running jobs")
+        if self.running:
+            for job in self.running:
+                snap = self._running_snapshot(job)
+                pct = fmt_value(snap["percent"], ".1f")
+                t = fmt_value(snap["sim_time"], ".3e")
+                dt = fmt_value(snap["delta_t"], ".1e")
+                d = fmt_value(snap["depth"], ".1f")
+                w = fmt_value(snap["width"], ".1f")
+                mt = fmt_value(snap["last_measure_time"], ".3e")
+                lines.append(
+                    f"  cand {snap['candidate']:02d} {snap['case']}: "
+                    f"{pct}% t={t} dt={dt} wall={fmt_duration(snap['wall_elapsed'])} "
+                    f"idle={fmt_duration(snap['idle'])} latest_mp_t={mt} "
+                    f"d={d}um w={w}um"
+                )
+                if snap["note"]:
+                    lines.append(f"    note: {snap['note']}")
+        else:
+            lines.append("  none")
+
+        lines.append("")
+        lines.append("Queued jobs")
+        if self.queue:
+            for job in self.queue[:12]:
+                lines.append(f"  cand {job.cand_id:02d} {job.name}")
+            if len(self.queue) > 12:
+                lines.append(f"  ... {len(self.queue) - 12} more")
+        else:
+            lines.append("  none")
+
+        valid = [
+            r for r in self.records
+            if r.get("status") == "complete"
+            and r.get("objective") == r.get("objective")
+            and r.get("objective") < PENALTY
+        ]
+        valid = sorted(valid, key=lambda r: r["objective"])
+        lines.append("")
+        lines.append("Top complete candidates")
+        if valid:
+            for rec in valid[:8]:
+                lines.append(
+                    f"  cand {rec['id']:02d}: obj={rec['objective']:.4f}; "
+                    f"{self._format_case_summary(rec)}"
+                )
+        else:
+            lines.append("  none yet")
+
+        recent = [r for r in self.records if r["cases"]]
+        recent = sorted(recent, key=lambda r: r["id"], reverse=True)[:10]
+        lines.append("")
+        lines.append("Recent candidates")
+        if recent:
+            for rec in recent:
+                obj = fmt_value(rec.get("objective"), ".4f")
+                lines.append(
+                    f"  cand {rec['id']:02d}: status={rec.get('status')} "
+                    f"obj={obj}; {self._format_case_summary(rec)}"
+                )
+        else:
+            lines.append("  none yet")
+
+        (RESULTS / "status.txt").write_text("\n".join(lines) + "\n")
+
     def _write_status(self) -> None:
         status = {
             "started_at": self.started_at,
             "updated_at": datetime.now().isoformat(timespec="seconds"),
             "cancelled": self.cancelled,
-            "budget": self.budget,
+            "candidate_budget": self.budget,
+            "max_solver_runs": self.budget * len(self.cases),
             "candidates_proposed": len(self.records),
             "jobs_done": self.done_count,
             "jobs_running": len(self.running),
@@ -665,6 +935,7 @@ class Calibrator:
             "best": self._best_record(),
         }
         (RESULTS / "status.json").write_text(json.dumps(status, indent=2, default=str))
+        self._write_status_text()
 
     def _finalize(self) -> None:
         (RESULTS / "plots").mkdir(parents=True, exist_ok=True)
@@ -695,7 +966,7 @@ class Calibrator:
             log("NOTE: run was cancelled - results are partial (see status.json).")
 
     def _write_summary_csv(self) -> None:
-        cols = ["id", "status", "objective"] + self.param_names
+        cols = ["id", "status", "objective", "physics_penalty"] + self.param_names
         for case in self.cases:
             nm = case["name"]
             cols += [f"{nm}__status", f"{nm}__sim_depth_um", f"{nm}__sim_width_um",
@@ -705,7 +976,8 @@ class Calibrator:
             w = csv.writer(fh)
             w.writeheader() if False else w.writerow(cols)
             for r in self.records:
-                row = [r["id"], r["status"], r["objective"]]
+                row = [r["id"], r["status"], r["objective"],
+                       r.get("physics_penalty", "")]
                 row += [r["params"][p] for p in self.param_names]
                 for case in self.cases:
                     c = r["cases"].get(case["name"], {})

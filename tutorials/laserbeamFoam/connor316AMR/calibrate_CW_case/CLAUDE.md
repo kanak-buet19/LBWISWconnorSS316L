@@ -55,8 +55,9 @@ results/                         ← generated: summary.csv, summary.json, best_
 4. `Allrun_long` runs OpenFOAM, calls `analyze_meltpool_vtu.py` after each written timestep → appends to `post-processing-data/vtu_meltpool_geometry.csv`
 5. `evaluate.py` reads that CSV, finds the longest stable tail (variation < `stabilityTol`), computes `case_error = mean(|depth_err|, |width_err|, |ar_err|)` where `ar_err` = aspect-ratio error (depth/width vs exp) — prevents compensating errors (e.g. depth+10%/width−10%) from scoring well
 6. Early abort: if pool has stabilized AND error > 50%, sim is killed immediately
-7. `BOOptimizer.tell()` → feeds result back; TPE proposes smarter next candidates
-8. On completion: `best_params.json` written, plots generated
+7. Candidate runs BOTH cases; `candidate_objective = mean(case_errors) + physics_penalty`. Physics penalty = Wiedemann-Franz constraint: penalizes kappa_liquid > L·T/ρ_elec.
+8. `BOOptimizer.tell()` → feeds result back; TPE proposes smarter next candidates
+9. On completion: `best_params.json` written, plots generated
 
 ## Resume behaviour
 
@@ -66,7 +67,7 @@ Candidates persist via `runs/cand_XX/result.json`. On resubmit, completed candid
 
 | Field | Where | Purpose |
 |---|---|---|
-| `optimizer.nSamples` | config | Total BO budget (default 48) |
+| `optimizer.nSamples` | config | Candidate/parameter-set budget (default 48); max solver runs are `nSamples × number_of_cases` |
 | `optimizer.initSamples` | config | LHS exploration phase size (default 16) |
 | `execution.coresPerSim` / `totalCores` | config | Parallelism; override with env vars |
 | `earlyAbort.errorThreshold` | config | Kill stabilized-but-bad sims at this error fraction |
@@ -74,16 +75,49 @@ Candidates persist via `runs/cand_XX/result.json`. On resubmit, completed candid
 | `geometry.*` | config | Domain sizing; drives blockMeshDict patching |
 | `control.*` | config | endTime, deltaT, maxCo, writeInterval |
 
-## The 12 calibration parameters
+## The 15 calibration parameters
 
-All live in `constant/transportProperties` and are patched by `caselib.patch_transportProperties`:
+All live in `constant/transportProperties` and are patched by `caselib.patch_transportProperties`.
 
-- `elec_resistivity` — controls laser absorption (ITO model)
-- `cp_scale`, `kappa_scale` — multiplicative on solid cp/kappa tables
-- `cp_liquid_slope`, `kappa_liquid_slope` — additive dX/dT in liquid phase (T ≥ Tliquidus=1723K, capped at Tvap=3122K)
-- `rho`, `nu`, `LatentHeat`, `LatentHeatVap`, `sigma`, `Marangoni_Constant`, `beta_r`
+### Table patching (solid/liquid decoupled)
 
-`_sub_entry` patches scalar fields by regex; `_scale_table` / `_apply_liquid_slope` patch table entries. If you add a new parameter, you must add a patcher call in `patch_transportProperties`.
+Solid and liquid property ranges are now independent — prevents optimizer from distorting well-known solid DSC data to compensate for uncertain liquid properties:
+1. `_scale_solid_table` scales only T ≤ Tsolidus=1658K entries by a narrow factor
+2. `_set_liquid_table` sets T ≥ Tliquidus=1723K entries directly (value + slope)
+
+### Scalar parameters
+
+- `elec_resistivity` — controls laser absorption (ITO model), 5e-7–9e-7 Ω·m
+- `rho`, `nu`, `LatentHeat`, `LatentHeatVap` — unchanged from v1
+- `beta_r` — recoil pressure accommodation coefficient, 0.064–0.096
+
+### Solid cp/kappa (narrow — well-known from DSC)
+
+- `cp_solid_scale` — multiplicative on solid cp, 0.97–1.03 (±3%)
+- `kappa_solid_scale` — multiplicative on solid kappa, 0.95–1.05 (±5%)
+
+### Liquid cp/kappa (direct value at Tliquidus — uncertain)
+
+- `cp_liquid_value` — cp at 1723K, 700–900 J/kg/K (baseline 790)
+- `kappa_liquid_value` — kappa at 1723K, 18–38 W/m/K (baseline 26.9)
+- `cp_liquid_slope` — d(cp)/dT, narrow: ±0.02 J/kg/K/K (±3.5% at Tvap)
+- `kappa_liquid_slope` — d(kappa)/dT, narrow: ±0.005 W/m/K/K (±26% at Tvap)
+
+### Surface tension (physically coupled)
+
+- `sigma` — surface tension at Tmelt, 1.5–2.1 N/m
+- `dSigmadT_norm` — normalized dσ/dT = (1/σ)(dσ/dT), -5.5e-4 to -1.0e-4 K⁻¹
+- `Marangoni_Constant` is **derived**: `sigma × dSigmadT_norm` (prevents unrealistic dσ/dT ratios)
+
+### Evaporative cooling
+
+- `LeeCoeff` — volumetric evaporation strength, 0–5e6 1/s
+
+### Physics penalty
+
+Wiedemann-Franz correlation constraint: `compute_physics_penalty()` in `evaluate.py` penalizes candidates where BOTH elec_resistivity AND kappa_liquid are high — a physically contradictory compensation (same scattering mechanisms that increase ρ MUST decrease κ). Uses nominal reference point (ρ_ref=7e-7, κ_ref=26.9) with 10 W/m/K lattice allowance. Weight 0.05, max penalty ~0.01 (soft tiebreaker, doesn't dominate).
+
+`_sub_entry` patches scalar fields by regex. If you add a new parameter, you must add a patcher call in `patch_transportProperties`.
 
 ## Environment variables
 
@@ -115,7 +149,8 @@ Progress-based (not wall-clock). A sim is killed only if `log.laserbeamFoam` sto
 | `best_params.json` | Winning parameter set + per-case errors |
 | `summary.json` | All candidates with full series data |
 | `summary.csv` | Flat table suitable for quick inspection |
-| `status.json` | Live progress (updated every poll interval) |
+| `status.json` | Live progress, including `candidate_budget` and `max_solver_runs` |
+| `status.txt` | HPC-friendly live dashboard; view with `watch -n 10 cat results/status.txt` |
 | `plots/ranked_objective.png` | Candidates ranked by objective |
 | `plots/params_vs_objective.png` | Each param vs objective scatter |
 | `plots/best_sim_vs_exp.png` | Best candidate sim vs exp bars |

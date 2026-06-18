@@ -1,8 +1,8 @@
 {
-  "_comment": "CW single-track 316L calibration. Thermophysical params calibrated ONCE, shared across ALL cases; only process params (P, v, radius) and geometry differ per case. Edit ranges/budget here.",
+  "_comment": "CW single-track 316L calibration. Thermophysical params calibrated ONCE, shared across ALL cases; only process params (P, v, radius) and geometry differ per case. Edit ranges/budget here. Two validation cases with different energy density improve parameter identifiability.",
 
   "objective": {
-    "_comment": "Per-case error = mean(|depth_err|, |width_err|, |ar_err|). AR = meltPoolDepth / meltPoolWidth. The aspect-ratio term penalizes compensating errors (e.g. depth+10% & width−10% fools plain mean-abs). Candidate objective = mean over all cases. Lower is better.",
+    "_comment": "Per-case error = mean(|depth_err|, |width_err|, |ar_err|). AR = meltPoolDepth / meltPoolWidth. The aspect-ratio term penalizes compensating errors (e.g. depth+10% & width−10% fools plain mean-abs). Candidate objective = mean over all cases + physicsPenalty. Lower is better.",
     "metric": "mean_abs_rel_error_with_ar",
     "depth_weight": 1.0,
     "width_weight": 1.0
@@ -13,23 +13,32 @@
     "nSamples": 48,
     "initSamples": 16,
     "seed": 42,
-    "_comment": "Bayesian optimization (Optuna TPE). nSamples = total evaluation budget (48 sims). First initSamples (16) are a Latin-Hypercube design for exploration; after that the TPE surrogate proposes where melt-pool error is likely lower. Proposals stream in batches up to maxParallel (constant-liar keeps a batch diversified). Each candidate runs the single validation case; lower objective is better."
+    "_comment": "Bayesian optimization (Optuna TPE). nSamples = total candidate budget (48 parameter sets). Each candidate can run BOTH validation cases, so the solver-run budget can be up to nSamples × number of cases. First initSamples (16) are a Latin-Hypercube design for exploration; after that the TPE surrogate proposes where melt-pool error is likely lower. Proposals stream in batches up to maxParallel (constant-liar keeps a batch diversified). Lower objective is better."
   },
 
   "parameters": {
-    "_comment": "Shared 316L thermophysical knobs. Ranges stay within published literature bounds. cp_scale/kappa_scale are multiplicative on the SOLID table; liquid slope is additive dX/dT for T>=Tliquidus. Marangoni_Constant is negative (dσ/dT).",
-    "elec_resistivity":   {"type": "scalar", "baseline": 7.0e-7,  "min": 5.0e-7,  "max": 9.0e-7,   "_units": "ohm·m"},
-    "cp_scale":           {"type": "scale",  "baseline": 1.0,     "min": 0.88,    "max": 1.12,     "_units": "-"},
-    "kappa_scale":        {"type": "scale",  "baseline": 1.0,     "min": 0.88,    "max": 1.12,     "_units": "-"},
-    "rho":                {"type": "scalar", "baseline": 7950.0,  "min": 7155.0,  "max": 8745.0,   "_units": "kg/m3"},
-    "beta_r":             {"type": "scalar", "baseline": 0.08,    "min": 0.064,   "max": 0.096,    "_units": "-"},
-    "nu":                 {"type": "scalar", "baseline": 7e-7,    "min": 4.9e-7,  "max": 9.1e-7,   "_units": "m2/s"},
-    "LatentHeat":         {"type": "scalar", "baseline": 260e3,   "min": 220e3,   "max": 300e3,    "_units": "J/kg"},
-    "LatentHeatVap":      {"type": "scalar", "baseline": 6.33e6,  "min": 5.5e6,   "max": 7.2e6,    "_units": "J/kg"},
-    "sigma":              {"type": "scalar", "baseline": 1.87,    "min": 1.5,     "max": 2.1,      "_units": "N/m"},
-    "Marangoni_Constant": {"type": "scalar", "baseline": -4.9e-4, "min": -8.0e-4, "max": -2.0e-4,  "_units": "N/m/K"},
-    "kappa_liquid_slope": {"type": "slope",  "baseline": 0.0,     "min": -0.006,  "max": 0.010,    "_units": "W/m/K/K, additive dkappa/dT for T>=Tliquidus, capped at Tvap"},
-    "cp_liquid_slope":    {"type": "slope",  "baseline": 0.0,     "min": -0.09,   "max": 0.15,     "_units": "J/kg/K/K, additive dcp/dT for T>=Tliquidus, capped at Tvap"}
+    "_comment": "Shared 316L thermophysical knobs. Solid cp/kappa have narrow ranges (well-known from DSC); liquid values are direct at Tliquidus=1723K (uncertain). Marangoni derived: sigma × dSigmadT_norm (physically coupled). Wiedemann-Franz penalty prevents unphysical kappa_liq > L·T/ρ_elec combinations.",
+    "elec_resistivity":   {"type": "scalar", "baseline": 7.0e-7,  "min": 5.0e-7,   "max": 9.0e-7,    "_units": "ohm·m"},
+    "cp_solid_scale":     {"type": "scale",  "baseline": 1.0,     "min": 0.97,     "max": 1.03,      "_units": "-", "_note": "Multiplicative on solid cp table (T ≤ Tsolidus=1658K). Solid cp well-known from DSC (±3%)."},
+    "kappa_solid_scale":  {"type": "scale",  "baseline": 1.0,     "min": 0.95,     "max": 1.05,      "_units": "-", "_note": "Multiplicative on solid kappa table (T ≤ Tsolidus)."},
+    "cp_liquid_value":    {"type": "scalar", "baseline": 790.0,   "min": 700.0,    "max": 900.0,     "_units": "J/kg/K", "_note": "cp at Tliquidus=1723K. Set directly (not scaled from solid)."},
+    "kappa_liquid_value": {"type": "scalar", "baseline": 26.9,    "min": 18.0,     "max": 38.0,      "_units": "W/m/K", "_note": "kappa at Tliquidus=1723K. Must satisfy WF: k_liq ≤ L·T/ρ_elec (penalized if violated)."},
+    "cp_liquid_slope":    {"type": "slope",  "baseline": 0.0,     "min": -0.02,    "max": 0.02,      "_units": "J/kg/K/K", "_note": "Narrow: ±28 J/kg/K at Tvap (±3.5% of nominal 790)."},
+    "kappa_liquid_slope": {"type": "slope",  "baseline": 0.0,     "min": -0.005,   "max": 0.005,     "_units": "W/m/K/K", "_note": "Narrow: ±7 W/m/K at Tvap (±26% of nominal 26.9)."},
+    "rho":                {"type": "scalar", "baseline": 7950.0,  "min": 7155.0,   "max": 8745.0,    "_units": "kg/m3"},
+    "beta_r":             {"type": "scalar", "baseline": 0.08,    "min": 0.064,    "max": 0.096,     "_units": "-"},
+    "nu":                 {"type": "scalar", "baseline": 7e-7,    "min": 4.9e-7,   "max": 9.1e-7,    "_units": "m2/s"},
+    "LatentHeat":         {"type": "scalar", "baseline": 260e3,   "min": 220e3,    "max": 300e3,     "_units": "J/kg"},
+    "LatentHeatVap":      {"type": "scalar", "baseline": 6.33e6,  "min": 5.5e6,    "max": 7.2e6,     "_units": "J/kg"},
+    "sigma":              {"type": "scalar", "baseline": 1.87,    "min": 1.5,      "max": 2.1,       "_units": "N/m"},
+    "dSigmadT_norm":      {"type": "scalar", "baseline": -2.62e-4,"min": -5.5e-4,  "max": -1.0e-4,   "_units": "K^-1", "_note": "Normalized dσ/dT = (1/σ)(dσ/dT). Marangoni_Constant = sigma × dSigmadT_norm. Literature for 316L: |dσ/dT|/σ ≈ 2-3×10⁻⁴ K⁻¹."},
+    "LeeCoeff":           {"type": "scalar", "baseline": 1e5,     "min": 0.0,      "max": 5e6,       "_units": "1/s"}
+  },
+
+  "physicsPenalty": {
+    "enabled": true,
+    "weight": 0.05,
+    "_comment": "Wiedemann-Franz correlation constraint: penalizes when optimizer picks BOTH high elec_resistivity (less absorption → shallower pool) AND high kappa_liquid (more conduction → deeper pool). These compensate in error but are physically contradictory — same scattering mechanisms that increase ρ MUST decrease κ. Expected κ at given ρ = κ_ref × (ρ_ref/ρ) + 10. weight=0.05 means worst violation adds ~0.01 to objective (typical case error ~0.05-0.20)."
   },
 
   "geometry": {
@@ -63,6 +72,16 @@
       "exp_width_um": 114.60,
       "exp_depth_um": 93.95,
       "_exp_rows": "Hofmann rows 332 (w117.0 d91.8) + 484 (w112.21 d96.11), mean"
+    },
+    {
+      "name": "case_P200_v1200",
+      "P_laser_W": 200,
+      "v_scan_mm_s": 1200,
+      "d_laser_mm": 0.05,
+      "laserRadius_m": 25e-6,
+      "exp_width_um": 94.69,
+      "exp_depth_um": 73.76,
+      "_exp_rows": "Hofmann row 161: P=200W v=1200mm/s d=0.05mm bare plate. Lower energy density → conduction-dominated, improves identifiability."
     }
   ],
 
@@ -72,7 +91,7 @@
     "stabilityTol": 0.10,
     "minPoints": 2,
     "skipSecondCaseIfFirstBad": true,
-    "_comment": "Abort once melt-pool STABILIZED (rel change last two points < stabilityTol) AND error > 50%. If case1 > 50% off, skip remaining cases for that candidate."
+    "_comment": "Abort once melt-pool STABILIZED (rel change last two points < stabilityTol) AND error > 50%. If case0 > 50% off, skip case1 for that candidate."
   },
 
   "cleanup": {
@@ -83,7 +102,7 @@
   "execution": {
     "coresPerSim": 8,
     "totalCores": 64,
-    "_comment": "maxParallel = floor(totalCores / coresPerSim) = 8 parallel sims. Override with env CALIB_TOTAL_CORES / CALIB_CORES_PER_SIM (HPC sets these via job_calibration.sh).",
+    "_comment": "maxParallel = floor(totalCores / coresPerSim) = 8 parallel sims. Override with env CALIB_TOTAL_CORES / CALIB_CORES_PER_SIM (HPC sets these via job_calibration.sh). With 2 cases per candidate, 8 parallel sims = 4 candidates running at once.",
     "pollIntervalSec": 10,
     "perSimStallSec": 1800,
     "perSimStartupSec": 3600,
