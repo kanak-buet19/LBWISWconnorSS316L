@@ -93,5 +93,10 @@ recoilTransitionWidth       100; // Smooth recoil activation width above Tvap [K
 Mm	0.055;                       // Molar mass [kg/mol]
 LatentHeatVap 6.33e6;            // Latent heat of vaporization [J/kg]
 
+LeeCoeff        0;              // Lee volumetric evaporation coeff [1/s]
+                                // 0 = disabled (interface Qv only)
+                                // 1e5 = moderate clamp (~300 K overshoot)
+                                // 1e7 = tight clamp (~30 K overshoot)
+                                // Derived from kinetic theory (Lee 1980; Chen+ 2020)
 
 // ************************************************************************* //

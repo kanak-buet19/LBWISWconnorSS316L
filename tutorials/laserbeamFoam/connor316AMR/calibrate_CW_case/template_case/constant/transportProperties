@@ -93,6 +93,10 @@ recoilTransitionWidth       10; // Smooth recoil activation width above Tvap [K]
 Mm	0.056;                       // Molar mass [kg/mol]
 LatentHeatVap 6.33e6;            // Latent heat of vaporization [J/kg]
 
+LeeCoeff        0;              // Lee volumetric evaporation coeff [1/s]
+                                // 0 = disabled (interface Qv only)
+                                // 1e5-1e7 recommended for LPBF keyhole regime
+
 V_scan          0.9;            // Scan speed (900 mm/s)
 scanDirection   (0 0 1);        // Scanning along +Z direction
 

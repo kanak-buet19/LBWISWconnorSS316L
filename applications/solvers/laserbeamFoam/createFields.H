@@ -279,6 +279,19 @@ const dimensionedScalar LatentHeatVap
     transportProperties//.lookup("LatentHeatVap")
 );
 
+// Lee model mass-transfer intensity factor [1/s].
+// Volumetric evaporative cooling: S_E = -r * rho1 * alpha1 * Lv * (T - Tvap)/Tvap
+// Derived from Hertz-Knudsen kinetics (Chen et al., 2020, IJHMT).
+//   0       = disabled (only interface Qv via Hertz-Knudsen)
+//   1e5     = moderate clamping (~300 K overshoot at 200 W / 50 µm spot)
+//   1e7     = tight clamping (~30 K overshoot, near-instant equilibrium)
+const dimensionedScalar LeeCoeff
+(
+    "LeeCoeff",
+    dimensionSet(0, 0, -1, 0, 0),
+    transportProperties.lookupOrDefault<scalar>("LeeCoeff", 0.0)
+);
+
 const dimensionedScalar R
 (
     "R",

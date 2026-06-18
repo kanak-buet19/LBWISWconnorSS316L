@@ -39,6 +39,27 @@
 
         Qv.correctBoundaryConditions();
 
+        // --- Volumetric Lee evaporation sink ---
+        // Drives T → Tvap_atm in bulk liquid wherever superheated.
+        // Complements interface-only Hertz-Knudsen Qv with a volumetric
+        // relaxation derived from kinetic theory (Lee, 1980; Chen et al.,
+        // 2020, IJHMT). Implicit split: +C*T on LHS (diagonal boost),
+        // +C*Tvap on RHS → effective sink -C*(T-Tvap) at convergence.
+        const dimensionedScalar LeeC
+        (
+            "LeeC",
+            LeeCoeff.dimensions()
+          * rho1.dimensions()
+          * LatentHeatVap.dimensions()
+          / Tvap_atm.dimensions(),
+            LeeCoeff.value()
+          * rho1.value()
+          * LatentHeatVap.value()
+          / max(Tvap_atm.value(), 1e-6)
+        );
+
+        const volScalarField LeeSwitch(pos(T - Tvap_atm));
+
         const volScalarField Qrad_expl (SB*em*(Foam::pow(TRef,4) + 3*Foam::pow(T,4)));
         const volScalarField Qrad_inpl (-(4*SB*em*Foam::pow(T,3)));
         const volScalarField Qconv (h_convection*(T - T_ambient));
@@ -74,10 +95,12 @@
           - fvm::Sp(fvc::ddt(rhoCp) + fvc::div(rhophicp), T)
           - fvm::laplacian(kappa, T)
           - fvm::Sp(Qrad_inpl*gradAlphaDamper, T)
+          + fvm::Sp(LeeC * alpha1 * LeeSwitch, T)
           ==
             laser.deposition()
           + Joulesource
           + (Qrad_expl - Qv)*gradAlphaDamper
+          + LeeC * alpha1 * LeeSwitch * Tvap_atm
           - Qconv*gradAlphaDamper
           - TRHS
         );
