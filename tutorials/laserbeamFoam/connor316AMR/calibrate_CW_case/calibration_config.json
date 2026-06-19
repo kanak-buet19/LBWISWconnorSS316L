@@ -32,7 +32,7 @@
     "LatentHeatVap":      {"type": "scalar", "baseline": 6.336e6, "min": 6.336e6,  "max": 6.336e6,   "fixed": true, "_units": "J/kg"},
     "sigma":              {"type": "scalar", "baseline": 1.87,    "min": 1.87,     "max": 1.87,      "fixed": true, "_units": "N/m"},
     "dSigmadT_norm":      {"type": "scalar", "baseline": -2.6203208556e-4, "min": -2.6203208556e-4, "max": -2.6203208556e-4, "fixed": true, "_units": "K^-1", "_note": "Fixed dσ/dT=-4.9e-4 N/m/K with sigma=1.87."},
-    "LeeCoeff":           {"type": "scalar", "baseline": 1e5,     "min": 1e-6,     "max": 3e5,       "_units": "1/s"}
+    "LeeCoeff":           {"type": "scalar", "baseline": 5e5,     "min": 3e5,      "max": 1e6,       "_units": "1/s"}
   },
 
   "geometry": {
