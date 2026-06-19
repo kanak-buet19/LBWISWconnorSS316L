@@ -183,6 +183,41 @@ def delta_t_stats(case_dir: Path, threshold: float) -> dict:
     }
 
 
+def thermal_stats(case_dir: Path, tail_bytes: int | None = None) -> dict:
+    """Latest and max TMax/pVapMax from solver log. pVap is reported in kPa."""
+    log_file = Path(case_dir) / "log.laserbeamFoam"
+    values: list[tuple[float, float]] = []
+    if log_file.exists():
+        try:
+            if tail_bytes is None:
+                text = log_file.read_text(errors="ignore")
+            else:
+                text = log_file.read_bytes()[-tail_bytes:].decode("utf-8", "ignore")
+        except OSError:
+            text = ""
+        for m in re.finditer(
+            r"TMax\s*=\s*([-+0-9.eE]+),\s*pVapMax\s*=\s*([-+0-9.eE]+)",
+            text,
+        ):
+            try:
+                values.append((float(m.group(1)), float(m.group(2)) / 1000.0))
+            except ValueError:
+                pass
+    if not values:
+        return {
+            "latest_TMax_K": float("nan"),
+            "latest_pVap_kPa": float("nan"),
+            "max_TMax_K": float("nan"),
+            "max_pVap_kPa": float("nan"),
+        }
+    return {
+        "latest_TMax_K": values[-1][0],
+        "latest_pVap_kPa": values[-1][1],
+        "max_TMax_K": max(v[0] for v in values),
+        "max_pVap_kPa": max(v[1] for v in values),
+    }
+
+
 def fmt_params(p: dict) -> str:
     parts = []
     for k, v in p.items():
@@ -699,6 +734,7 @@ class Calibrator:
         entry = {"status": job.status, "note": job.note}
         if case_error is not None:
             entry["case_error"] = case_error
+        entry.update(thermal_stats(job.case_dir))
         if evaluate:
             try:
                 res = job.evaluate(self.stability_tol)
@@ -1096,6 +1132,7 @@ class Calibrator:
             "depth": latest.get("depth"),
             "width": latest.get("width"),
             "note": job.note,
+            **thermal_stats(job.case_dir, tail_bytes=200000),
         }
 
     def _format_case_summary(self, rec: dict) -> str:
@@ -1170,12 +1207,14 @@ class Calibrator:
                 d = fmt_value(snap["depth"], ".1f")
                 w = fmt_value(snap["width"], ".1f")
                 mt = fmt_value(snap["last_measure_time"], ".3e")
+                tmax = fmt_value(snap["latest_TMax_K"], ".0f")
+                pvap = fmt_value(snap["latest_pVap_kPa"], ".1f")
                 lines.append(
                     f"  cand {snap['candidate']:02d} {snap['case']}: "
                     f"{pct}% t={t} dt={dt} wall={fmt_duration(snap['wall_elapsed'])} "
                     f"idle={fmt_duration(snap['idle'])} low_dt={snap['low_dt_count']}/{self.min_delta_t_polls} "
                     f"latest_mp_t={mt} "
-                    f"d={d}um w={w}um"
+                    f"d={d}um w={w}um TMax={tmax}K pVap={pvap}kPa"
                 )
                 if snap["note"]:
                     lines.append(f"    note: {snap['note']}")
@@ -1282,7 +1321,7 @@ class Calibrator:
                 "parameters": best["params"],
                 "cases": {n: {k: v for k, v in c.items() if k != "series"}
                           for n, c in best["cases"].items()},
-                "note": "Shared thermophysical params calibrated against both CW cases.",
+                "note": "Shared elec_resistivity and LeeCoeff calibrated across all CW cases.",
             }
             (RESULTS / "best_params.json").write_text(json.dumps(bp, indent=2, default=str))
             log(f"BEST candidate #{best['id']} objective {best['objective']:.4f}")
@@ -1301,7 +1340,9 @@ class Calibrator:
             nm = case["name"]
             cols += [f"{nm}__status", f"{nm}__sim_depth_um", f"{nm}__sim_width_um",
                      f"{nm}__depth_err", f"{nm}__width_err", f"{nm}__case_error",
-                     f"{nm}__converged"]
+                     f"{nm}__converged", f"{nm}__latest_TMax_K",
+                     f"{nm}__latest_pVap_kPa", f"{nm}__max_TMax_K",
+                     f"{nm}__max_pVap_kPa"]
         with (RESULTS / "summary.csv").open("w", newline="") as fh:
             w = csv.writer(fh)
             w.writeheader() if False else w.writerow(cols)
@@ -1313,7 +1354,9 @@ class Calibrator:
                     row += [c.get("status", ""), c.get("sim_depth_um", ""),
                             c.get("sim_width_um", ""), c.get("depth_err", ""),
                             c.get("width_err", ""), c.get("case_error", ""),
-                            c.get("converged", "")]
+                            c.get("converged", ""), c.get("latest_TMax_K", ""),
+                            c.get("latest_pVap_kPa", ""), c.get("max_TMax_K", ""),
+                            c.get("max_pVap_kPa", "")]
                 w.writerow(row)
 
 

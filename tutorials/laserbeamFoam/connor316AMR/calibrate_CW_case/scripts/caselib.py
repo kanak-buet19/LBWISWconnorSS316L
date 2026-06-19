@@ -1,7 +1,7 @@
 """Case construction for CW melt-pool calibration.
 
 Builds a runnable laserbeamFoam case from `template_case/` by applying:
-  - candidate (thermophysical) params  -> shared across BOTH cases of a candidate
+  - candidate (thermophysical) params  -> shared across all cases of a candidate
   - case (process + geometry) params   -> P, v, laserRadius, domain size, scan path
 
 All edits are plain-text regex patches on the OpenFOAM dictionaries so no
@@ -70,6 +70,15 @@ def _sub_entry(text: str, key: str, value: str) -> str:
     if k == 0:
         raise ValueError(f"entry '{key}' not found")
     return new
+
+
+def _sub_entry_in_block(text: str, block: str, key: str, value: str) -> str:
+    pattern = rf"({block}\s*\{{)(.*?)(\n\}})"
+    m = re.search(pattern, text, flags=re.S)
+    if not m:
+        raise ValueError(f"block '{block}' not found")
+    body = _sub_entry(m.group(2), key, value)
+    return text[:m.start()] + m.group(1) + body + m.group(3) + text[m.end():]
 
 
 def patch_blockMeshDict(path: Path, geo: dict) -> None:
@@ -228,10 +237,8 @@ def patch_transportProperties(path: Path, params: dict,
     t = _sub_entry(t, "Marangoni_Constant", g(marangoni))
     t = _sub_entry(t, "LatentHeatVap", g(params["LatentHeatVap"]))
     t = _sub_entry(t, "LeeCoeff", g(params["LeeCoeff"]))
-    # metal rho only (gas rho = 1, no collision with baseline 7950)
-    t = re.sub(r"(\brho\s+)7950(\.\d+)?\b", rf"\g<1>{g(params['rho'])}", t, count=1)
-    # metal nu first (gas nu is 1.48e-05, comes after metal block)
-    t = re.sub(r"(\bnu\s+)7e-7\b", rf"\g<1>{g(params['nu'])}", t, count=1)
+    t = _sub_entry_in_block(t, "metal", "rho", g(params["rho"]))
+    t = _sub_entry_in_block(t, "metal", "nu", g(params["nu"]))
     # LatentHeat (fusion): requires trailing whitespace to avoid matching LatentHeatVap
     t = _sub_entry(t, "LatentHeat", g(params["LatentHeat"]))
 

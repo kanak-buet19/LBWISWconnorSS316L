@@ -55,7 +55,7 @@ results/                         ← generated: summary.csv, summary.json, best_
 4. `Allrun_long` runs OpenFOAM, calls `analyze_meltpool_vtu.py` after each written timestep → appends to `post-processing-data/vtu_meltpool_geometry.csv`
 5. `evaluate.py` reads that CSV, finds the longest stable tail (variation < `stabilityTol`), computes `case_error = mean(|depth_err|, |width_err|, |ar_err|)` where `ar_err` = aspect-ratio error (depth/width vs exp) — prevents compensating errors (e.g. depth+10%/width−10%) from scoring well
 6. Early abort: if pool has stabilized AND error > 50%, sim is killed immediately
-7. Candidate runs BOTH cases; `candidate_objective = mean(case_errors)`. Electrical resistivity and liquid kappa are not coupled in the objective.
+7. Candidate runs all three Hofmann calibration cases; `candidate_objective = mean(case_errors)`.
 8. `BOOptimizer.tell()` → feeds result back; TPE proposes smarter next candidates
 9. On completion: `best_params.json` written, plots generated
 
@@ -87,21 +87,18 @@ Solid and liquid property controls are independent:
 
 ### Active optimizer knobs
 
-- `elec_resistivity` — controls laser absorption (ITO model), 9e-7–1.7e-6 Ω·m
-- `cp_liquid_value` — cp at 1723K, 760–850 J/kg/K (baseline 790)
-- `kappa_liquid_value` — kappa at 1723K, 28–40 W/m/K (baseline 34)
-- `dSigmadT_norm` — normalized Marangoni coefficient; maps to dσ/dT = -8e-4 to -4.9e-4 N/m/K
+- `elec_resistivity` — controls laser absorption (ITO model), 7e-7–1.7e-6 Ω·m
 - `LeeCoeff` — volumetric evaporation strength, 1e4–3e5 1/s
 
 ### Fixed baseline knobs
 
-These are patched into each case but are not optimized: `cp_solid_scale`, `kappa_solid_scale`, `cp_liquid_slope`, `kappa_liquid_slope`, `rho`, `beta_r`, `nu`, `LatentHeat`, `LatentHeatVap`, and `sigma`. `Marangoni_Constant` is derived as `sigma × dSigmadT_norm`.
+These are patched into each case but are not optimized: `cp_solid_scale`, `kappa_solid_scale`, `cp_liquid_value`, `kappa_liquid_value`, `cp_liquid_slope`, `kappa_liquid_slope`, `rho`, `beta_r`, `nu`, `LatentHeat`, `LatentHeatVap`, `sigma`, and `dSigmadT_norm`. `Marangoni_Constant` is derived as `sigma × dSigmadT_norm`.
 
-SS316 table-derived fixed values: `rho=6881 kg/m3` uses the liquid density because the model has one scalar metal density, `nu=1.1626e-6 m2/s` from dynamic viscosity `8e-3 Pa.s / 6881 kg/m3`, `LatentHeat=2.6e5 J/kg`, `LatentHeatVap=6.336e6 J/kg`, and `sigma=1.87 N/m`.
+SS316 table-derived fixed values follow `hofmann_validation/template_case/constant/transportProperties`: `rho=6881 kg/m3`, `nu=1.1626e-6 m2/s`, `LatentHeat=2.6e5 J/kg`, `LatentHeatVap=6.336e6 J/kg`, `sigma=1.87 N/m`, and `Marangoni_Constant=-4.9e-4 N/m/K`.
 
-### Resistivity and liquid kappa
+### Resistivity and Lee coefficient
 
-`elec_resistivity` controls the laser absorption model, while `kappa_liquid_value` is the total/effective thermal conductivity used by the heat solver. They are calibrated independently; no Wiedemann-Franz objective penalty is applied.
+`elec_resistivity` controls the laser absorption model. `LeeCoeff` controls volumetric evaporation cooling. These are the only active calibration knobs.
 
 `_sub_entry` patches scalar fields by regex. If you add a new parameter, you must add a patcher call in `patch_transportProperties`.
 
@@ -122,7 +119,7 @@ SS316 table-derived fixed values: `rho=6881 kg/m3` uses the liquid density becau
 Progress-based (not wall-clock). A sim is killed only if `log.laserbeamFoam` stops advancing:
 - No solver output at all for `perSimStartupSec` (3600s) → killed as "no solver output"
 - Solver Time frozen for `perSimStallSec` (1800s) → killed as "solver Time stalled"
-- `deltaT < minDeltaTAbort` for `minDeltaTConsecutivePolls` poll intervals → killed as "LOW_DT"
+- `deltaT < minDeltaTAbort` for `minDeltaTConsecutivePolls` poll intervals → killed as "LOW_DT"; current floor is `4e-8`
 - LOW_DT cases receive `lowDeltaTPenalty` (default 1.25), not the hard `PENALTY=9.99`
 - Slow-but-progressing sims are allowed unless `deltaT` stays below the configured floor.
 
@@ -147,7 +144,7 @@ calibration case under `runs/long_track_best_cand_XX/` and runs normal
 |---|---|
 | `best_params.json` | Winning parameter set + per-case errors |
 | `summary.json` | All candidates with full series data |
-| `summary.csv` | Flat table suitable for quick inspection |
+| `summary.csv` | Flat table suitable for quick inspection, including per-case TMax and pVapMax |
 | `status.json` | Live progress, including `candidate_budget` and `max_solver_runs` |
 | `status.txt` | HPC-friendly live dashboard; view with `watch -n 10 cat results/status.txt` |
 | `long_track_status.json` | Trigger decision and results for optional 1.5 mm long-track validation |

@@ -22,9 +22,9 @@ phases          (metal gas);
 metal
 {
     transportModel  Newtonian;     // Viscosity model for the metal phase
-    nu              7e-7;          // Kinematic viscosity [m2/s]
+    nu              1.1626e-6;     // Kinematic viscosity [m2/s]
 
-    rho             7950;          // Density [kg/m3]
+    rho             6881;          // Density [kg/m3]
 
     Tsolidus 1658;                 // Solidus temperature [K]
     Tliquidus 1723;                // Liquidus temperature [K]
@@ -37,10 +37,10 @@ metal
         (500    17.60)
         (800    21.98)
         (1200   27.82)
-        (1658   34.51)
-        (1723   26.90)
-        (2500   26.90)
-        (5000   26.90)
+        (1658   32.51)
+        (1723   30.00)
+        (2500   30.00)
+        (5000   30.00)
     );
 
     table_cp                       // Metal specific heat table: (T [K], cp [J/kg/K])
@@ -55,7 +55,7 @@ metal
         (5000   790.0)
     );
 
-    elec_resistivity	7e-7;        // Electrical resistivity [ohm m]; calibrated (50um mesh, score 7.79); coarse 125um best was 2.45e-6
+    elec_resistivity	1e-6;      // Electrical resistivity [ohm m]
 }
 
 gas
@@ -91,13 +91,11 @@ Tvap_atm    3122;                // Vaporization temperature at p0 [K]
 recoilPressureModel condensation; // condensation or modifiedReducedPressure
 recoilTransitionWidth       10; // Smooth recoil activation width above Tvap [K]
 Mm	0.056;                       // Molar mass [kg/mol]
-LatentHeatVap 6.33e6;            // Latent heat of vaporization [J/kg]
+LatentHeatVap 7.45e6;            // Latent heat of vaporization [J/kg]
 
-LeeCoeff        0;              // Lee volumetric evaporation coeff [1/s]
-                                // 0 = disabled (interface Qv only)
-                                // 1e5-1e7 recommended for LPBF keyhole regime
+LeeCoeff        3e5;              // Lee volumetric evaporation coeff [1/s]
 
-V_scan          0.9;            // Scan speed (900 mm/s)
+V_scan          0.9;            // Scan speed [m/s]
 scanDirection   (0 0 1);        // Scanning along +Z direction
 
 // ************************************************************************* //

@@ -1,5 +1,5 @@
 {
-  "_comment": "CW single-track 316L calibration. Thermophysical params calibrated ONCE, shared across ALL cases; only process params (P, v, radius) and geometry differ per case. Edit ranges/budget here. Two validation cases with different energy density improve parameter identifiability.",
+  "_comment": "CW single-track 316L calibration. Fit one shared elec_resistivity + LeeCoeff pair across three Hofmann validation cases. All other SS316L thermophysical values are fixed from the Hofmann validation template.",
 
   "objective": {
     "_comment": "Per-case error = mean(|depth_err|, |width_err|, |ar_err|). AR = meltPoolDepth / meltPoolWidth. The aspect-ratio term penalizes compensating errors (e.g. depth+10% & width−10% fools plain mean-abs). Candidate objective = mean over all cases. Lower is better.",
@@ -13,16 +13,16 @@
     "nSamples": 224,
     "initSamples": 32,
     "seed": 42,
-    "_comment": "Bayesian optimization (Optuna TPE). nSamples = total candidate budget (224 parameter sets). Each candidate can run BOTH validation cases, so the solver-run budget can be up to nSamples × number of cases. First initSamples (32) are a Latin-Hypercube design for exploration; after that the TPE surrogate proposes where melt-pool error is likely lower. Proposals stream in batches up to maxParallel (constant-liar keeps a batch diversified). Lower objective is better."
+    "_comment": "Bayesian optimization (Optuna TPE). nSamples = total candidate budget (224 parameter sets). Each candidate can run every validation case, so the solver-run budget is nSamples × number of cases. First initSamples (32) are a Latin-Hypercube design for exploration; after that the TPE surrogate proposes where melt-pool error is likely lower. Proposals stream in batches up to maxParallel (constant-liar keeps a batch diversified). Lower objective is better."
   },
 
   "parameters": {
-    "_comment": "Reduced active 316L calibration: fit elec_resistivity, cp_liquid_value, kappa_liquid_value, dSigmadT_norm, and LeeCoeff. Lower-leverage properties are fixed at baseline to stabilize the search. Marangoni_Constant = sigma × dSigmadT_norm.",
-    "elec_resistivity":   {"type": "scalar", "baseline": 1.35e-6, "min": 9.0e-7,   "max": 1.7e-6,    "_units": "ohm·m"},
+    "_comment": "Only elec_resistivity and LeeCoeff are active. Everything else is fixed to the Hofmann validation SS316L baseline. Marangoni_Constant = sigma × dSigmadT_norm.",
+    "elec_resistivity":   {"type": "scalar", "baseline": 1.1e-6,  "min": 8.0e-7,   "max": 1.5e-6,    "_units": "ohm·m"},
     "cp_solid_scale":     {"type": "scale",  "baseline": 1.0,     "min": 1.0,      "max": 1.0,       "fixed": true, "_units": "-", "_note": "Fixed at baseline. Multiplicative on solid cp table (T ≤ Tsolidus=1658K)."},
     "kappa_solid_scale":  {"type": "scale",  "baseline": 1.0,     "min": 1.0,      "max": 1.0,       "fixed": true, "_units": "-", "_note": "Fixed at baseline. Multiplicative on solid kappa table (T ≤ Tsolidus)."},
-    "cp_liquid_value":    {"type": "scalar", "baseline": 790.0,   "min": 760.0,    "max": 850.0,     "_units": "J/kg/K", "_note": "cp at Tliquidus=1723K. Set directly (not scaled from solid)."},
-    "kappa_liquid_value": {"type": "scalar", "baseline": 34.0,    "min": 28.0,     "max": 40.0,      "_units": "W/m/K", "_note": "Total/effective kappa at Tliquidus=1723K; calibrated independently from elec_resistivity."},
+    "cp_liquid_value":    {"type": "scalar", "baseline": 790.0,   "min": 790.0,    "max": 790.0,     "fixed": true, "_units": "J/kg/K", "_note": "Fixed Hofmann baseline."},
+    "kappa_liquid_value": {"type": "scalar", "baseline": 26.9,    "min": 26.9,     "max": 26.9,      "fixed": true, "_units": "W/m/K", "_note": "Fixed Hofmann baseline."},
     "cp_liquid_slope":    {"type": "slope",  "baseline": 0.0,     "min": 0.0,      "max": 0.0,       "fixed": true, "_units": "J/kg/K/K", "_note": "Fixed at baseline."},
     "kappa_liquid_slope": {"type": "slope",  "baseline": 0.0,     "min": 0.0,      "max": 0.0,       "fixed": true, "_units": "W/m/K/K", "_note": "Fixed at baseline."},
     "rho":                {"type": "scalar", "baseline": 6881.0,  "min": 6881.0,   "max": 6881.0,    "fixed": true, "_units": "kg/m3", "_note": "Fixed to SS316 liquid density from table (T >= 1723K). Model uses one metal rho scalar, so liquid value is used for melt-pool flow."},
@@ -31,27 +31,27 @@
     "LatentHeat":         {"type": "scalar", "baseline": 260e3,   "min": 260e3,    "max": 260e3,     "fixed": true, "_units": "J/kg"},
     "LatentHeatVap":      {"type": "scalar", "baseline": 6.336e6, "min": 6.336e6,  "max": 6.336e6,   "fixed": true, "_units": "J/kg"},
     "sigma":              {"type": "scalar", "baseline": 1.87,    "min": 1.87,     "max": 1.87,      "fixed": true, "_units": "N/m"},
-    "dSigmadT_norm":      {"type": "scalar", "baseline": -3.7433155080e-4, "min": -4.2780748663e-4, "max": -2.6203208556e-4, "_units": "K^-1", "_note": "Normalized Marangoni coefficient. With fixed sigma=1.87, this spans dσ/dT from -8e-4 to -4.9e-4 N/m/K; baseline is -7e-4/1.87."},
-    "LeeCoeff":           {"type": "scalar", "baseline": 1e5,     "min": 1e4,      "max": 3e5,       "_units": "1/s"}
+    "dSigmadT_norm":      {"type": "scalar", "baseline": -2.6203208556e-4, "min": -2.6203208556e-4, "max": -2.6203208556e-4, "fixed": true, "_units": "K^-1", "_note": "Fixed dσ/dT=-4.9e-4 N/m/K with sigma=1.87."},
+    "LeeCoeff":           {"type": "scalar", "baseline": 1e5,     "min": 1e-6,     "max": 3e5,       "_units": "1/s"}
   },
 
   "geometry": {
     "_comment": "Common geometry constants in metres. Per-case y/z extents computed from these + process/target.",
-    "base_cell": 24e-6,
-    "gas_thickness": 144e-6,
+    "base_cell": 32e-6,
+    "gas_thickness": 128e-6,
     "x_extent": 512e-6,
-    "lead_in": 230e-6,
-    "tail": 230e-6,
+    "lead_in": 100e-6,
+    "tail": 200e-6,
     "substrate_depth_factor": 2.5,
     "substrate_min": 224e-6,
-    "surface_y_um": 144.0
+    "surface_y_um": 128.0
   },
 
   "control": {
-    "endTime": 0.25e-3,
-    "writeInterval": 5e-5,
+    "endTime": 0.7e-3,
+    "writeInterval": 2e-5,
     "deltaT": 1e-7,
-    "maxDeltaT": 1e-6,
+    "maxDeltaT": 2e-7,
     "maxCo": 0.35,
     "maxAlphaCo": 0.35
   },
@@ -62,7 +62,7 @@
       "P_laser_W": 200,
       "v_scan_mm_s": 900,
       "d_laser_mm": 0.05,
-      "laserRadius_m": 25e-6,
+      "laserRadius_m": 26e-6,
       "exp_width_um": 114.60,
       "exp_depth_um": 93.95,
       "_exp_rows": "Hofmann rows 332 (w117.0 d91.8) + 484 (w112.21 d96.11), mean"
@@ -72,24 +72,34 @@
       "P_laser_W": 200,
       "v_scan_mm_s": 1200,
       "d_laser_mm": 0.05,
-      "laserRadius_m": 25e-6,
+      "laserRadius_m": 26e-6,
       "exp_width_um": 94.69,
       "exp_depth_um": 73.76,
       "_exp_rows": "Hofmann row 161: P=200W v=1200mm/s d=0.05mm bare plate. Lower energy density → conduction-dominated, improves identifiability."
+    },
+    {
+      "name": "case_P250_v600",
+      "P_laser_W": 250,
+      "v_scan_mm_s": 600,
+      "d_laser_mm": 0.05,
+      "laserRadius_m": 26e-6,
+      "exp_width_um": 142.0,
+      "exp_depth_um": 204.6,
+      "_exp_rows": "Hofmann 250W 600mm/s bare-plate keyhole/deep case."
     }
   ],
 
   "earlyAbort": {
     "enabled": true,
-    "errorThreshold": 0.50,
+    "errorThreshold": 0.35,
     "stabilityTol": 0.10,
     "minPoints": 2,
-    "skipSecondCaseIfFirstBad": true,
-    "_comment": "Abort once melt-pool STABILIZED (rel change last two points < stabilityTol) AND error > 50%. If case0 > 50% off, skip case1 for that candidate."
+    "skipSecondCaseIfFirstBad": false,
+    "_comment": "Abort a running case only once the melt pool has stabilized and the error is still above threshold. Remaining cases are still run so the shared two-knob fit sees all three operating points."
   },
 
   "cleanup": {
-    "enabled": true,
+    "enabled": false,
     "_comment": "Disk saver: keep ONLY the best valid candidate's full data (VTK + processor*/). A candidate is best-valid only when every calibration case reaches status=done; low_dt/failed/skipped/aborted candidates still train the optimizer but are stripped. The tiny post-processing CSV, logs and case_build.json are always kept, so scoring is unaffected."
   },
 
@@ -106,13 +116,13 @@
   "execution": {
     "coresPerSim": 8,
     "totalCores": 64,
-    "_comment": "maxParallel = floor(totalCores / coresPerSim) = 8 parallel sims. Override with env CALIB_TOTAL_CORES / CALIB_CORES_PER_SIM (HPC sets these via job_calibration.sh). With 2 cases per candidate, 8 parallel sims = 4 candidates running at once.",
+    "_comment": "maxParallel = floor(totalCores / coresPerSim) = 8 parallel sims. Override with env CALIB_TOTAL_CORES / CALIB_CORES_PER_SIM (HPC sets these via job_calibration.sh). With 3 cases per candidate, 8 parallel sims keeps the swarm full as cases finish.",
     "pollIntervalSec": 10,
     "perSimStallSec": 1800,
     "perSimStartupSec": 3600,
-    "minDeltaTAbort": 1e-9,
+    "minDeltaTAbort": 4e-8,
     "minDeltaTConsecutivePolls": 5,
-    "lowDeltaTPenalty": 1.25,
+    "lowDeltaTPenalty": 1.0,
     "_watchdog": "Progress-based, not wall-clock. Kill a sim if no solver output appears for perSimStartupSec, solver Time stops advancing for perSimStallSec, or deltaT stays below minDeltaTAbort for minDeltaTConsecutivePolls poll intervals. LOW_DT cases get lowDeltaTPenalty instead of the hard failure penalty. Set minDeltaTAbort <= 0 to disable the low-deltaT abort."
   }
 }

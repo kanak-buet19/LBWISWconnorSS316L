@@ -203,6 +203,8 @@ def main():
     laser_z = 0.0
     exec_time = 0.0
     abs_val = 0.0
+    tmax = None
+    pvap_kpa = None
     last_printed_mp_time = -1.0
     first_time_seen = True
     dump_errors = False
@@ -282,6 +284,14 @@ def main():
                 match = re.search(r"ExecutionTime = ([\d\.e\-+]+)", line)
                 if match:
                     exec_time = float(match.group(1))
+            elif "TMax = " in line and "pVapMax = " in line:
+                match = re.search(r"TMax = ([\d\.e\-+]+),\s*pVapMax = ([\d\.e\-+]+)", line)
+                if match:
+                    try:
+                        tmax = float(match.group(1))
+                        pvap_kpa = float(match.group(2)) / 1000.0
+                    except ValueError:
+                        pass
                     
             # Build and update progress bar postfix (keep it minimal and clean)
             postfix = {
@@ -293,6 +303,10 @@ def main():
             }
             if abs_val > 0.0:
                 postfix['Abs'] = f"{abs_val*100.0:.1f}%"
+            if tmax is not None:
+                postfix['TMax'] = f"{tmax:.0f}K"
+            if pvap_kpa is not None:
+                postfix['pVap'] = f"{pvap_kpa:.1f}kPa"
             pbar.set_postfix(postfix)
             
     pbar.close()
