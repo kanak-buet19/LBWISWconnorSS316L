@@ -17,12 +17,12 @@
   },
 
   "parameters": {
-    "_comment": "Reduced active 316L calibration: fit elec_resistivity, cp_liquid_value, kappa_liquid_value, and LeeCoeff. Lower-leverage properties are fixed at baseline to stabilize the search. Marangoni_Constant is fixed from the SS316 table.",
-    "elec_resistivity":   {"type": "scalar", "baseline": 1.0e-6,  "min": 7.0e-7,   "max": 2.0e-6,    "_units": "ohm·m"},
+    "_comment": "Reduced active 316L calibration: fit elec_resistivity, cp_liquid_value, kappa_liquid_value, dSigmadT_norm, and LeeCoeff. Lower-leverage properties are fixed at baseline to stabilize the search. Marangoni_Constant = sigma × dSigmadT_norm.",
+    "elec_resistivity":   {"type": "scalar", "baseline": 1.35e-6, "min": 9.0e-7,   "max": 1.7e-6,    "_units": "ohm·m"},
     "cp_solid_scale":     {"type": "scale",  "baseline": 1.0,     "min": 1.0,      "max": 1.0,       "fixed": true, "_units": "-", "_note": "Fixed at baseline. Multiplicative on solid cp table (T ≤ Tsolidus=1658K)."},
     "kappa_solid_scale":  {"type": "scale",  "baseline": 1.0,     "min": 1.0,      "max": 1.0,       "fixed": true, "_units": "-", "_note": "Fixed at baseline. Multiplicative on solid kappa table (T ≤ Tsolidus)."},
-    "cp_liquid_value":    {"type": "scalar", "baseline": 790.0,   "min": 700.0,    "max": 900.0,     "_units": "J/kg/K", "_note": "cp at Tliquidus=1723K. Set directly (not scaled from solid)."},
-    "kappa_liquid_value": {"type": "scalar", "baseline": 26.9,    "min": 18.0,     "max": 38.0,      "_units": "W/m/K", "_note": "Total/effective kappa at Tliquidus=1723K; calibrated independently from elec_resistivity."},
+    "cp_liquid_value":    {"type": "scalar", "baseline": 790.0,   "min": 760.0,    "max": 850.0,     "_units": "J/kg/K", "_note": "cp at Tliquidus=1723K. Set directly (not scaled from solid)."},
+    "kappa_liquid_value": {"type": "scalar", "baseline": 34.0,    "min": 28.0,     "max": 40.0,      "_units": "W/m/K", "_note": "Total/effective kappa at Tliquidus=1723K; calibrated independently from elec_resistivity."},
     "cp_liquid_slope":    {"type": "slope",  "baseline": 0.0,     "min": 0.0,      "max": 0.0,       "fixed": true, "_units": "J/kg/K/K", "_note": "Fixed at baseline."},
     "kappa_liquid_slope": {"type": "slope",  "baseline": 0.0,     "min": 0.0,      "max": 0.0,       "fixed": true, "_units": "W/m/K/K", "_note": "Fixed at baseline."},
     "rho":                {"type": "scalar", "baseline": 6881.0,  "min": 6881.0,   "max": 6881.0,    "fixed": true, "_units": "kg/m3", "_note": "Fixed to SS316 liquid density from table (T >= 1723K). Model uses one metal rho scalar, so liquid value is used for melt-pool flow."},
@@ -31,8 +31,8 @@
     "LatentHeat":         {"type": "scalar", "baseline": 260e3,   "min": 260e3,    "max": 260e3,     "fixed": true, "_units": "J/kg"},
     "LatentHeatVap":      {"type": "scalar", "baseline": 6.336e6, "min": 6.336e6,  "max": 6.336e6,   "fixed": true, "_units": "J/kg"},
     "sigma":              {"type": "scalar", "baseline": 1.87,    "min": 1.87,     "max": 1.87,      "fixed": true, "_units": "N/m"},
-    "dSigmadT_norm":      {"type": "scalar", "baseline": -2.6203208556e-4, "min": -2.6203208556e-4, "max": -2.6203208556e-4, "fixed": true, "_units": "K^-1", "_note": "Fixed from SS316 table: Marangoni_Constant = dσ/dT = -4.9e-4 N/m/K. Since Marangoni_Constant = sigma × dSigmadT_norm and sigma=1.87, dSigmadT_norm=-4.9e-4/1.87."},
-    "LeeCoeff":           {"type": "scalar", "baseline": 1e5,     "min": 0.0,      "max": 5e6,       "_units": "1/s"}
+    "dSigmadT_norm":      {"type": "scalar", "baseline": -3.7433155080e-4, "min": -4.2780748663e-4, "max": -2.6203208556e-4, "_units": "K^-1", "_note": "Normalized Marangoni coefficient. With fixed sigma=1.87, this spans dσ/dT from -8e-4 to -4.9e-4 N/m/K; baseline is -7e-4/1.87."},
+    "LeeCoeff":           {"type": "scalar", "baseline": 1e5,     "min": 1e4,      "max": 3e5,       "_units": "1/s"}
   },
 
   "geometry": {
@@ -110,7 +110,7 @@
     "pollIntervalSec": 10,
     "perSimStallSec": 1800,
     "perSimStartupSec": 3600,
-    "minDeltaTAbort": 5e-8,
+    "minDeltaTAbort": 1e-9,
     "minDeltaTConsecutivePolls": 5,
     "lowDeltaTPenalty": 1.25,
     "_watchdog": "Progress-based, not wall-clock. Kill a sim if no solver output appears for perSimStartupSec, solver Time stops advancing for perSimStallSec, or deltaT stays below minDeltaTAbort for minDeltaTConsecutivePolls poll intervals. LOW_DT cases get lowDeltaTPenalty instead of the hard failure penalty. Set minDeltaTAbort <= 0 to disable the low-deltaT abort."

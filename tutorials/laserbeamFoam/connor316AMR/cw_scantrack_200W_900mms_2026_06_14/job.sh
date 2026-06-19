@@ -2,7 +2,7 @@
 #SBATCH --job-name=cw200W900mms
 #SBATCH --time=04:00:00
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=16
+#SBATCH --ntasks-per-node=64
 #SBATCH --account=mch250110
 #SBATCH --output=output_%j.out
 #SBATCH --error=output_%j.err
@@ -13,7 +13,7 @@
 # OpenFOAM 2506 inside Apptainer; post-processing Python on host conda (isw_env).
 #
 # Submit:  sbatch job.sh
-# Ranks set by system/decomposeParDict (numberOfSubdomains = 16).
+# Allocates 64 tasks; solver ranks are set by system/decomposeParDict.
 
 set -Eeo pipefail
 

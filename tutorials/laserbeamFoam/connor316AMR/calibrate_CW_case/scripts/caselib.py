@@ -287,4 +287,8 @@ def build_case(template_dir: Path, dest: Path, candidate_params: dict,
     record = {"case": case_cfg, "geometry": geo, "params": candidate_params,
               "cores": cores, "surface_y_um": geom["surface_y_um"]}
     (dest / "case_build.json").write_text(json.dumps(record, indent=2))
+    (dest / "exp_summary.csv").write_text(
+        "width_um,depth_um\n"
+        f"{case_cfg['exp_width_um']},{case_cfg['exp_depth_um']}\n"
+    )
     return record

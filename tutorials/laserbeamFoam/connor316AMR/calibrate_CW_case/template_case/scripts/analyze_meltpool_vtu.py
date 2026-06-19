@@ -25,27 +25,15 @@ NX, NZ, NY = 180, 180, 180
 INTERP_METHOD = "linear"
 SURFACE_Y_UM = 300
 PDF_DPI = 150
-def find_exp_figure_dir() -> Path:
-    curr = Path(__file__).resolve().parent
-    for _ in range(10):
-        candidate = curr / "exp_figure"
-        if candidate.is_dir():
-            return candidate
-        if curr.parent == curr:
-            break
-        curr = curr.parent
-    return Path(__file__).resolve().parents[2] / "exp_figure"
-
-EXP_DIR = find_exp_figure_dir()
-EXP_SUMMARY_CSV = EXP_DIR / "exp_weld12_earth_summary.csv"
-EXP_MASK_IMAGE = EXP_DIR / "exp_weld12_earth_mask.png"
+EXP_SUMMARY_CSV = Path(__file__).resolve().parents[1] / "exp_summary.csv"
+EXP_MASK_IMAGE = Path(__file__).resolve().parents[1] / "exp_mask.png"
 
 
 CSV_FIELDS = [
     "time",
     "z_slice_um",
     "surface_y_um",
-    "T_liq_K",
+    "T_threshold_K",
     "keyholeDepth_um",
     "keyholeDepthX_um",
     "keyholeDepthY_um",
@@ -143,8 +131,8 @@ def interpolate_slice(
     Ag[np.isnan(Ag)] = Ag_near[np.isnan(Ag)]
     Tg[np.isnan(Tg)] = Tg_near[np.isnan(Tg)]
 
-    Tg_liq_region = np.ma.masked_where(Ag <= 0.1, Tg)
-    return xg, yg, Xg, Yg, Ag, Tg_liq_region
+    Tg_threshold_region = np.ma.masked_where(Ag <= 0.1, Tg)
+    return xg, yg, Xg, Yg, Ag, Tg_threshold_region
 
 
 def find_max_depth(contour_set, surface_y_um: float, contour_name: str):
@@ -379,7 +367,7 @@ def read_experimental_meltpool(exp_csv: Path) -> dict[str, float] | None:
     return result
 
 
-def plot_slice(ax, Xg, Yg, Ag, Tg_liq_region, title: str, xlabel: str, t_liquidus: float, surface_y_um: float):
+def plot_slice(ax, Xg, Yg, Ag, Tg_threshold_region, title: str, xlabel: str, t_threshold: float, surface_y_um: float):
     pcm = ax.pcolormesh(
         Xg,
         Yg,
@@ -402,16 +390,16 @@ def plot_slice(ax, Xg, Yg, Ag, Tg_liq_region, title: str, xlabel: str, t_liquidu
         for collection in cs_alpha.collections:
             collection.set_rasterized(True)
 
-    cs_tliq = ax.contour(
+    cs_t = ax.contour(
         Xg,
         Yg,
-        Tg_liq_region,
-        levels=[t_liquidus],
+        Tg_threshold_region,
+        levels=[t_threshold],
         colors="yellow",
         linewidths=2,
     )
-    if hasattr(cs_tliq, "collections"):
-        for collection in cs_tliq.collections:
+    if hasattr(cs_t, "collections"):
+        for collection in cs_t.collections:
             collection.set_rasterized(True)
 
     ax.axhline(
@@ -426,7 +414,7 @@ def plot_slice(ax, Xg, Yg, Ag, Tg_liq_region, title: str, xlabel: str, t_liquidu
     ax.set_ylabel("Y / depth (um)")
     ax.axis("equal")
     ax.invert_yaxis()
-    return pcm, cs_alpha, cs_tliq
+    return pcm, cs_alpha, cs_t
 
 
 def plot_meltpool_comparison(
@@ -703,7 +691,7 @@ def mark_combined_depths(
 
 def measure(
     vtk_file: Path,
-    t_liquidus: float,
+    t_threshold: float,
     surface_y_um: float,
     output_pdf: Path,
     exp_metrics: dict[str, float] | None,
@@ -718,7 +706,7 @@ def measure(
 
     if len(yz) < 3:
         print(f"Skipping {vtk_file}: YZ slice has fewer than 3 cells.")
-        return empty_row(vtk_file, t_liquidus, surface_y_um)
+        return empty_row(vtk_file, t_threshold, surface_y_um)
 
     zg, _, Zg, Yg, Ag_yz, Tg_yz_liq_region = interpolate_slice(yz, "z_um", "y_um", NZ, NY)
 
@@ -730,7 +718,7 @@ def measure(
     history_ax = fig.add_subplot(gs[1, 4:6])
     time_value = vtk_time(vtk_file)
 
-    pcm, cs_yz, cs_tliq_yz = plot_slice(
+    pcm, cs_yz, cs_t_yz = plot_slice(
         slice_axes[0],
         Zg,
         Yg,
@@ -738,12 +726,12 @@ def measure(
         Tg_yz_liq_region,
         title=f"YZ slice at x = {x_plane * 1e6:.1f} um, t = {time_value:.6g} s",
         xlabel="Z / scan track (um)",
-        t_liquidus=t_liquidus,
+        t_threshold=t_threshold,
         surface_y_um=surface_y_um,
     )
 
     yz_depth = find_max_depth(cs_yz, surface_y_um, "alpha.metal = 0.5")
-    meltpool_yz_depth = find_max_depth(cs_tliq_yz, surface_y_um, f"T = {t_liquidus:.0f} K")
+    meltpool_yz_depth = find_max_depth(cs_t_yz, surface_y_um, f"T = {t_threshold:.0f} K")
     mark_combined_depths(slice_axes[0], yz_depth, meltpool_yz_depth, surface_y_um, zg, "z")
 
     if yz_depth is None:
@@ -758,11 +746,11 @@ def measure(
     if len(xy) < 3:
         plt.close(fig)
         print(f"Skipping {vtk_file}: XY slice has fewer than 3 cells.")
-        return empty_row(vtk_file, t_liquidus, surface_y_um, z_plane * 1e6)
+        return empty_row(vtk_file, t_threshold, surface_y_um, z_plane * 1e6)
 
     xg, _, Xg, Yg_xy, Ag_xy, Tg_xy_liq_region = interpolate_slice(xy, "x_um", "y_um", NX, NY)
 
-    _, cs_xy, cs_tliq_xy = plot_slice(
+    _, cs_xy, cs_t_xy = plot_slice(
         slice_axes[1],
         Xg,
         Yg_xy,
@@ -770,13 +758,13 @@ def measure(
         Tg_xy_liq_region,
         title=f"XY slice at z = {z_plane * 1e6:.1f} um",
         xlabel="X / width (um)",
-        t_liquidus=t_liquidus,
+        t_threshold=t_threshold,
         surface_y_um=surface_y_um,
     )
 
     xy_depth = find_max_depth(cs_xy, surface_y_um, "alpha.metal = 0.5")
-    meltpool_xy_depth = find_max_depth(cs_tliq_xy, surface_y_um, f"T = {t_liquidus:.0f} K")
-    meltpool_width = find_surface_width(cs_tliq_xy, surface_y_um, f"T = {t_liquidus:.0f} K")
+    meltpool_xy_depth = find_max_depth(cs_t_xy, surface_y_um, f"T = {t_threshold:.0f} K")
+    meltpool_width = find_surface_width(cs_t_xy, surface_y_um, f"T = {t_threshold:.0f} K")
     keyhole_width = find_keyhole_surface_width(
         cs_xy,
         surface_y_um,
@@ -821,7 +809,7 @@ def measure(
         "time": time_value,
         "z_slice_um": z_plane * 1e6,
         "surface_y_um": surface_y_um,
-        "T_liq_K": t_liquidus,
+        "T_threshold_K": t_threshold,
         "keyholeDepth_um": result_value(xy_depth, 2),
         "keyholeDepthX_um": result_value(xy_depth, 0),
         "keyholeDepthY_um": result_value(xy_depth, 1),
@@ -855,7 +843,7 @@ def measure(
 
     fig.colorbar(pcm, ax=slice_axes, label="alpha.metal")
     slice_axes[1].legend(
-        handles=legend_handles(t_liquidus),
+        handles=legend_handles(t_threshold),
         loc="upper right",
         frameon=True,
         facecolor="white",
@@ -872,7 +860,7 @@ def measure(
 
 def empty_row(
     vtk_file: Path,
-    t_liquidus: float,
+    t_threshold: float,
     surface_y_um: float,
     z_slice_um: float = np.nan,
 ) -> dict[str, float]:
@@ -880,14 +868,14 @@ def empty_row(
     row["time"] = vtk_time(vtk_file)
     row["z_slice_um"] = z_slice_um
     row["surface_y_um"] = surface_y_um
-    row["T_liq_K"] = t_liquidus
+    row["T_threshold_K"] = t_threshold
     return row
 
 
-def legend_handles(t_liquidus: float) -> list[Line2D]:
+def legend_handles(t_threshold: float) -> list[Line2D]:
     return [
         Line2D([0], [0], color="black", linewidth=2, label="alpha.metal = 0.5"),
-        Line2D([0], [0], color="yellow", linewidth=2, label=f"T = {t_liquidus:.0f} K"),
+        Line2D([0], [0], color="yellow", linewidth=2, label=f"T = {t_threshold:.0f} K"),
         Line2D([0], [0], color="white", linestyle="--", linewidth=1.5, label="substrate surface"),
         Line2D(
             [0],
@@ -921,7 +909,7 @@ def read_existing_rows(csv_path: Path) -> dict[float, dict[str, str]]:
 
 def write_rows(csv_path: Path, rows_by_time: dict[float, dict[str, object]]) -> None:
     with csv_path.open("w", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=CSV_FIELDS)
+        writer = csv.DictWriter(handle, fieldnames=CSV_FIELDS, extrasaction="ignore")
         writer.writeheader()
         for time_value in sorted(rows_by_time):
             writer.writerow(rows_by_time[time_value])
@@ -947,7 +935,10 @@ def main() -> None:
     parser.add_argument("--vtk-dir", type=Path, default=None)
     parser.add_argument("--vtk-file", type=Path, default=None)
     parser.add_argument("--surface-y-um", type=float, default=SURFACE_Y_UM)
-    parser.add_argument("--t-liquidus", type=float, default=None)
+    parser.add_argument("--t-threshold", type=float, default=None,
+                        help="Temperature threshold for melt-pool contour; defaults to Tsolidus.")
+    parser.add_argument("--t-liquidus", type=float, default=None,
+                        help="Backward-compatible alias for --t-threshold.")
     parser.add_argument("--exp-summary-csv", type=Path, default=EXP_SUMMARY_CSV)
     parser.add_argument("--exp-mask-image", type=Path, default=EXP_MASK_IMAGE)
     args = parser.parse_args()
@@ -959,9 +950,9 @@ def main() -> None:
     out_dir.mkdir(exist_ok=True)
     pdf_dir.mkdir(exist_ok=True)
 
-    t_liquidus = args.t_liquidus
-    if t_liquidus is None:
-        t_liquidus = parse_scalar(case / "constant" / "transportProperties", "Tliquidus")
+    t_threshold = args.t_threshold if args.t_threshold is not None else args.t_liquidus
+    if t_threshold is None:
+        t_threshold = parse_scalar(case / "constant" / "transportProperties", "Tsolidus")
 
     if args.vtk_file:
         vtk_files = [args.vtk_file.resolve()]
@@ -979,7 +970,7 @@ def main() -> None:
         index = section_index(vtk_file, vtk_dir)
         row = measure(
             vtk_file,
-            t_liquidus,
+            t_threshold,
             args.surface_y_um,
             numbered_section_pdf(pdf_dir, index, vtk_file),
             exp_metrics,
