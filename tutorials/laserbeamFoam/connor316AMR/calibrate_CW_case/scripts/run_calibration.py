@@ -278,9 +278,9 @@ class Calibrator:
         self.stability_tol = self.early.get("stabilityTol", 0.10)
         self.param_names = pspec_keys(cfg["parameters"])
 
-        # disk saver: keep only the single best candidate's full data (VTK +
-        # processor*). When a better candidate completes, the previous best is
-        # stripped; every non-best candidate is stripped as soon as it finishes.
+        # disk saver: keep only the single best valid candidate's full data
+        # (VTK + processor*). Penalized/incomplete candidates train the
+        # optimizer but are not retained as the winner.
         clean = cfg.get("cleanup", {})
         self.cleanup_enabled = bool(clean.get("enabled", True))
         self.best_kept_cand: int | None = None
@@ -469,7 +469,7 @@ class Calibrator:
                 val = obj if (obj == obj and obj < PENALTY) else PENALTY
                 self.opt.replay(params, val)       # teach surrogate
                 completed += 1
-                if obj == obj and obj < PENALTY and self._cand_has_vtk(cid):
+                if self._is_best_eligible(rec) and self._cand_has_vtk(cid):
                     if obj < self.best_kept_obj:
                         self.best_kept_obj, self.best_kept_cand = obj, cid
             else:
@@ -757,9 +757,12 @@ class Calibrator:
         return n
 
     def _dispose_completed(self) -> None:
-        """Keep only the best-so-far candidate's full data. When a candidate
-        finishes: if it is the new best, strip the previous best; otherwise
-        strip it now. Idempotent via the per-record '_disposed' flag."""
+        """Keep only the best valid candidate's full data.
+
+        When a candidate finishes: if all cases reached status=done and it is
+        the new best, strip the previous best; otherwise strip it now.
+        Idempotent via the per-record '_disposed' flag.
+        """
         if not self.cleanup_enabled:
             return
         for rec in self.records:
@@ -769,7 +772,7 @@ class Calibrator:
             if cid == self.best_kept_cand:  # retained best, never re-examine
                 continue
             obj = rec["objective"]
-            valid = obj == obj and obj < PENALTY  # finite, real result
+            valid = self._is_best_eligible(rec)
             if valid and obj < self.best_kept_obj:
                 if self.best_kept_cand is not None:
                     m = self._strip_candidate(self.best_kept_cand)
@@ -786,7 +789,7 @@ class Calibrator:
                 rec["_disposed"] = True
                 self._persist_candidate(cid)
                 if m:
-                    ostr = f"{obj:.3f}" if valid else "n/a"
+                    ostr = f"{obj:.3f}" if obj == obj and obj < PENALTY else "n/a"
                     bstr = (f"{self.best_kept_obj:.3f}"
                             if self.best_kept_obj < float("inf") else "n/a")
                     log(f"cand {cid:02d} STRIP ({m} dirs, obj {ostr} "
@@ -839,10 +842,23 @@ class Calibrator:
 
     def _best_record(self) -> dict | None:
         done = [r for r in self.records
-                if r.get("status") == "complete"
-                and r["objective"] == r["objective"]
-                and r["objective"] < PENALTY]
+                if self._is_best_eligible(r)]
         return min(done, key=lambda r: r["objective"]) if done else None
+
+    def _is_best_eligible(self, rec: dict) -> bool:
+        """Only fully finished real sims may be called best.
+
+        Penalized candidates still train the optimizer, but low-dt/failed/
+        skipped/early-aborted cases should not appear as the winning case.
+        """
+        if rec.get("status") != "complete":
+            return False
+        obj = rec.get("objective", float("nan"))
+        if not (obj == obj and obj < PENALTY):
+            return False
+        cases = rec.get("cases", {})
+        return all(cases.get(case["name"], {}).get("status") == "done"
+                   for case in self.cases)
 
     def _best_objective(self) -> str:
         b = self._best_record()
@@ -1135,13 +1151,13 @@ class Calibrator:
             lines.append("  none yet")
 
         lines.append("")
-        lines.append("Best complete candidate")
+        lines.append("Best valid candidate")
         if best:
             lines.append(f"  cand {best['id']:02d}: objective {best['objective']:.4f}; status {best['status']}")
             lines.append(f"  cases: {self._format_case_summary(best)}")
             lines.append(f"  params: {fmt_params(best['params'])}")
         else:
-            lines.append("  n/a")
+            lines.append("  n/a (no candidate has completed all cases with status=done)")
 
         lines.append("")
         lines.append("Running jobs")
@@ -1178,13 +1194,11 @@ class Calibrator:
 
         valid = [
             r for r in self.records
-            if r.get("status") == "complete"
-            and r.get("objective") == r.get("objective")
-            and r.get("objective") < PENALTY
+            if self._is_best_eligible(r)
         ]
         valid = sorted(valid, key=lambda r: r["objective"])
         lines.append("")
-        lines.append("Top complete candidates")
+        lines.append("Top valid complete candidates")
         if valid:
             for rec in valid[:8]:
                 lines.append(

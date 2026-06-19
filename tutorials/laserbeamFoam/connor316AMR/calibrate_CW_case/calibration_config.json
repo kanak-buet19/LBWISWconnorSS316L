@@ -90,7 +90,7 @@
 
   "cleanup": {
     "enabled": true,
-    "_comment": "Disk saver: keep ONLY the best-so-far candidate's full data (VTK + processor*/). When a candidate completes with a lower objective it becomes the new best and the previous best is stripped; every non-best candidate is stripped as soon as it finishes. The tiny post-processing CSV, logs and case_build.json are always kept, so scoring is unaffected."
+    "_comment": "Disk saver: keep ONLY the best valid candidate's full data (VTK + processor*/). A candidate is best-valid only when every calibration case reaches status=done; low_dt/failed/skipped/aborted candidates still train the optimizer but are stripped. The tiny post-processing CSV, logs and case_build.json are always kept, so scoring is unaffected."
   },
 
   "longTrackValidation": {

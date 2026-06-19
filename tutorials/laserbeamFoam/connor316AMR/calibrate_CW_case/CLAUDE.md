@@ -127,7 +127,7 @@ Progress-based (not wall-clock). A sim is killed only if `log.laserbeamFoam` sto
 
 ## Disk cleanup
 
-`cleanup.enabled=true` keeps only the best-so-far candidate's full data (VTK + processor*/). Non-best candidates are stripped after finishing. `strip_heavy()` deletes VTK/, processor*/, and reconstructed time dirs; keeps CSV, logs, `case_build.json`, `result.json`.
+`cleanup.enabled=true` keeps only the best valid candidate's full data (VTK + processor*/). A candidate is best-valid only when every calibration case reaches `status=done`; low-dt, failed, skipped, or early-aborted candidates still train the optimizer but are stripped. `strip_heavy()` deletes VTK/, processor*/, and reconstructed time dirs; keeps CSV, logs, `case_build.json`, `result.json`.
 
 ## Long-track validation
 
