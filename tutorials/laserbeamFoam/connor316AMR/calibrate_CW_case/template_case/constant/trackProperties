@@ -15,8 +15,7 @@ FoamFile
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-// Duration of one laser track in seconds.
-// 1.0 mm / 900 mm/s = 1.1111 ms.
+// Duration is patched per calibration case from calibration_config.json.
 trackDuration      5.55556e-4;
 
 // Extra cell layers around meltTrackID for conservative mesh refinement.

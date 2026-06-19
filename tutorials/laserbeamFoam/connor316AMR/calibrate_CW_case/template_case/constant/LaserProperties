@@ -28,8 +28,7 @@ timeVsLaserPower
 }
 
 // CW single-track 316L bareplate calibration (Hofmann 2026 dataset).
-// P=200W, v=900mm/s, d_laser=0.05mm (radius=25um).
-// Scan 1.0mm in z; track time = 1.111 ms.  Used to calibrate elec_resistivity.
+// Process settings are patched per calibration case from calibration_config.json.
 pulseLaser false;
 
 V_incident	(0 1 0);

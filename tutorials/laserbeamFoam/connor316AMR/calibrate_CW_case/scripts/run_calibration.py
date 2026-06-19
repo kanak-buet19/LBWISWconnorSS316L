@@ -1321,7 +1321,7 @@ class Calibrator:
                 "parameters": best["params"],
                 "cases": {n: {k: v for k, v in c.items() if k != "series"}
                           for n, c in best["cases"].items()},
-                "note": "Shared elec_resistivity and LeeCoeff calibrated across all CW cases.",
+                "note": "Shared elec_resistivity, LeeCoeff, and Marangoni strength calibrated across all CW cases.",
             }
             (RESULTS / "best_params.json").write_text(json.dumps(bp, indent=2, default=str))
             log(f"BEST candidate #{best['id']} objective {best['objective']:.4f}")

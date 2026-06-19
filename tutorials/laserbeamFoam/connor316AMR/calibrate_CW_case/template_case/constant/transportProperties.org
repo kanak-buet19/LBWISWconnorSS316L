@@ -22,9 +22,9 @@ phases          (metal gas);
 metal
 {
     transportModel  Newtonian;     // Viscosity model for the metal phase
-    nu              7e-7;          // Kinematic viscosity [m2/s]
+    nu              1.1626e-6;     // Kinematic viscosity [m2/s]
 
-    rho             7904;          // Density [kg/m3]
+    rho             6881;          // Density [kg/m3]
 
     Tsolidus 1658;                 // Solidus temperature [K]
     Tliquidus 1723;                // Liquidus temperature [K]
@@ -37,10 +37,10 @@ metal
         (500    17.60)
         (800    21.98)
         (1200   27.82)
-        (1658   34.51)
-        (1723   26.90)
-        (2500   26.90)
-        (5000   26.90)
+        (1658   32.51)
+        (1723   30.00)
+        (2500   30.00)
+        (5000   30.00)
     );
 
     table_cp                       // Metal specific heat table: (T [K], cp [J/kg/K])
@@ -55,7 +55,7 @@ metal
         (5000   790.0)
     );
 
-    elec_resistivity	7e-7;        // Electrical resistivity [ohm m]; calibrated (50um mesh, score 7.79); coarse 125um best was 2.45e-6
+    elec_resistivity	1e-6;      // Electrical resistivity [ohm m]
 }
 
 gas
@@ -75,23 +75,27 @@ gas
     beta    4.0e-5;               // Gas thermal expansion coefficient [1/K]
 }
 
-emS                         0.26;       // Solid emissivity [-]
-emL                         0.26;       // Liquid emissivity [-]
+emS                         0.3;       // Solid emissivity [-]
+emL                         0.3;       // Liquid emissivity [-]
 TRef                        300;        // Radiation reference/background temperature [K]
 T_ambient                   300;        // Ambient temperature for convection [K]
 h_convection                0;          // Convective heat transfer coefficient [W/m2/K]
 
-sigma            1.8;            // Surface tension [N/m]
+sigma            1.87;            // Surface tension [N/m]
 Marangoni_Constant	-4.9e-4;    // d(sigma)/dT for Marangoni force [N/m/K]
 p0	101325.0;                    // Atmospheric pressure reference [Pa]
-p_amb   1e-3;                 // Ambient chamber pressure used to choose Tvap [Pa]
-beta_r  0.18;                    // Recoil pressure accommodation coefficient [-]
-Tvap	2379;                    // Vaporization temperature at p_amb [K]
-Tvap_atm    3134;                // Vaporization temperature at p0 [K]
+p_amb   101325.0;                 // Ambient chamber pressure used to choose Tvap [Pa]
+beta_r  0.08;                    // Recoil pressure accommodation coefficient [-]
+Tvap	3122;                    // Vaporization temperature at p_amb [K]
+Tvap_atm    3122;                // Vaporization temperature at p0 [K]
 recoilPressureModel condensation; // condensation or modifiedReducedPressure
-recoilTransitionWidth       100; // Smooth recoil activation width above Tvap [K]
-Mm	0.055;                       // Molar mass [kg/mol]
-LatentHeatVap 6.33e6;            // Latent heat of vaporization [J/kg]
+recoilTransitionWidth       10; // Smooth recoil activation width above Tvap [K]
+Mm	0.056;                       // Molar mass [kg/mol]
+LatentHeatVap 7.45e6;            // Latent heat of vaporization [J/kg]
 
+LeeCoeff        3e5;              // Lee volumetric evaporation coeff [1/s]
+
+V_scan          0.9;            // Scan speed [m/s]
+scanDirection   (0 0 1);        // Scanning along +Z direction
 
 // ************************************************************************* //

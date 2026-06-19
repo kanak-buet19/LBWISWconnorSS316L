@@ -95,7 +95,7 @@ Solid and liquid property controls are independent:
 
 These are patched into each case but are not optimized: `cp_solid_scale`, `kappa_solid_scale`, `cp_liquid_value`, `kappa_liquid_value`, `cp_liquid_slope`, `kappa_liquid_slope`, `rho`, `beta_r`, `nu`, `LatentHeat`, `LatentHeatVap`, and `sigma`. `Marangoni_Constant` is derived as `sigma × dSigmadT_norm`.
 
-SS316 table-derived fixed values follow `hofmann_validation/template_case/constant/transportProperties`: `rho=6881 kg/m3`, `nu=1.1626e-6 m2/s`, `LatentHeat=2.6e5 J/kg`, `LatentHeatVap=6.336e6 J/kg`, `sigma=1.87 N/m`, and `Marangoni_Constant=-4.9e-4 N/m/K`.
+SS316 table-derived fixed values follow `hofmann_validation/template_case/constant/transportProperties`: `rho=6881 kg/m3`, `nu=1.1626e-6 m2/s`, `LatentHeat=2.6e5 J/kg`, `LatentHeatVap=7.45e6 J/kg`, `sigma=1.87 N/m`, and `Marangoni_Constant=-4.9e-4 N/m/K`.
 
 ### Resistivity and Lee coefficient
 
