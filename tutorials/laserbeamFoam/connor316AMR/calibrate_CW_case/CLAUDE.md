@@ -87,18 +87,19 @@ Solid and liquid property controls are independent:
 
 ### Active optimizer knobs
 
-- `elec_resistivity` — controls laser absorption (ITO model), 7e-7–1.7e-6 Ω·m
-- `LeeCoeff` — volumetric evaporation strength, 1e4–3e5 1/s
+- `elec_resistivity` — controls laser absorption (ITO model), 8e-7–1.5e-6 Ω·m
+- `LeeCoeff` — volumetric evaporation strength, 3e5–1e6 1/s
+- `dSigmadT_norm` — Marangoni lever; maps to dσ/dT = -7e-4 to -4.9e-4 N/m/K
 
 ### Fixed baseline knobs
 
-These are patched into each case but are not optimized: `cp_solid_scale`, `kappa_solid_scale`, `cp_liquid_value`, `kappa_liquid_value`, `cp_liquid_slope`, `kappa_liquid_slope`, `rho`, `beta_r`, `nu`, `LatentHeat`, `LatentHeatVap`, `sigma`, and `dSigmadT_norm`. `Marangoni_Constant` is derived as `sigma × dSigmadT_norm`.
+These are patched into each case but are not optimized: `cp_solid_scale`, `kappa_solid_scale`, `cp_liquid_value`, `kappa_liquid_value`, `cp_liquid_slope`, `kappa_liquid_slope`, `rho`, `beta_r`, `nu`, `LatentHeat`, `LatentHeatVap`, and `sigma`. `Marangoni_Constant` is derived as `sigma × dSigmadT_norm`.
 
 SS316 table-derived fixed values follow `hofmann_validation/template_case/constant/transportProperties`: `rho=6881 kg/m3`, `nu=1.1626e-6 m2/s`, `LatentHeat=2.6e5 J/kg`, `LatentHeatVap=6.336e6 J/kg`, `sigma=1.87 N/m`, and `Marangoni_Constant=-4.9e-4 N/m/K`.
 
 ### Resistivity and Lee coefficient
 
-`elec_resistivity` controls the laser absorption model. `LeeCoeff` controls volumetric evaporation cooling. These are the only active calibration knobs.
+`elec_resistivity` controls the laser absorption model. `LeeCoeff` controls volumetric evaporation cooling. `dSigmadT_norm` controls Marangoni strength while preserving the sign and SS316L-scale range.
 
 `_sub_entry` patches scalar fields by regex. If you add a new parameter, you must add a patcher call in `patch_transportProperties`.
 
