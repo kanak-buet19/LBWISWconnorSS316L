@@ -17,8 +17,8 @@
   },
 
   "parameters": {
-    "_comment": "Reduced active 316L calibration: fit elec_resistivity, cp_liquid_value, kappa_liquid_value, dSigmadT_norm, and LeeCoeff. Lower-leverage properties are fixed at baseline to stabilize the search. Marangoni_Constant = sigma × dSigmadT_norm.",
-    "elec_resistivity":   {"type": "scalar", "baseline": 7.0e-7,  "min": 5.0e-7,   "max": 9.0e-7,    "_units": "ohm·m"},
+    "_comment": "Reduced active 316L calibration: fit elec_resistivity, cp_liquid_value, kappa_liquid_value, and LeeCoeff. Lower-leverage properties are fixed at baseline to stabilize the search. Marangoni_Constant is fixed from the SS316 table.",
+    "elec_resistivity":   {"type": "scalar", "baseline": 1.0e-6,  "min": 7.0e-7,   "max": 2.0e-6,    "_units": "ohm·m"},
     "cp_solid_scale":     {"type": "scale",  "baseline": 1.0,     "min": 1.0,      "max": 1.0,       "fixed": true, "_units": "-", "_note": "Fixed at baseline. Multiplicative on solid cp table (T ≤ Tsolidus=1658K)."},
     "kappa_solid_scale":  {"type": "scale",  "baseline": 1.0,     "min": 1.0,      "max": 1.0,       "fixed": true, "_units": "-", "_note": "Fixed at baseline. Multiplicative on solid kappa table (T ≤ Tsolidus)."},
     "cp_liquid_value":    {"type": "scalar", "baseline": 790.0,   "min": 700.0,    "max": 900.0,     "_units": "J/kg/K", "_note": "cp at Tliquidus=1723K. Set directly (not scaled from solid)."},
@@ -31,7 +31,7 @@
     "LatentHeat":         {"type": "scalar", "baseline": 260e3,   "min": 260e3,    "max": 260e3,     "fixed": true, "_units": "J/kg"},
     "LatentHeatVap":      {"type": "scalar", "baseline": 6.336e6, "min": 6.336e6,  "max": 6.336e6,   "fixed": true, "_units": "J/kg"},
     "sigma":              {"type": "scalar", "baseline": 1.87,    "min": 1.87,     "max": 1.87,      "fixed": true, "_units": "N/m"},
-    "dSigmadT_norm":      {"type": "scalar", "baseline": -2.62e-4,"min": -5.5e-4,  "max": -1.0e-4,   "_units": "K^-1", "_note": "Normalized dσ/dT = (1/σ)(dσ/dT). Baseline from SS316 table: -4.9e-4 / 1.87 = -2.62e-4 K^-1. Marangoni_Constant = sigma × dSigmadT_norm."},
+    "dSigmadT_norm":      {"type": "scalar", "baseline": -2.6203208556e-4, "min": -2.6203208556e-4, "max": -2.6203208556e-4, "fixed": true, "_units": "K^-1", "_note": "Fixed from SS316 table: Marangoni_Constant = dσ/dT = -4.9e-4 N/m/K. Since Marangoni_Constant = sigma × dSigmadT_norm and sigma=1.87, dSigmadT_norm=-4.9e-4/1.87."},
     "LeeCoeff":           {"type": "scalar", "baseline": 1e5,     "min": 0.0,      "max": 5e6,       "_units": "1/s"}
   },
 

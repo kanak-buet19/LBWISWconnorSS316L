@@ -87,17 +87,16 @@ Solid and liquid property controls are independent:
 
 ### Active optimizer knobs
 
-- `elec_resistivity` — controls laser absorption (ITO model), 5e-7–9e-7 Ω·m
+- `elec_resistivity` — controls laser absorption (ITO model), 7e-7–2e-6 Ω·m
 - `cp_liquid_value` — cp at 1723K, 700–900 J/kg/K (baseline 790)
 - `kappa_liquid_value` — kappa at 1723K, 18–38 W/m/K (baseline 26.9)
-- `dSigmadT_norm` — normalized dσ/dT = (1/σ)(dσ/dT), -5.5e-4 to -1.0e-4 K⁻¹
 - `LeeCoeff` — volumetric evaporation strength, 0–5e6 1/s
 
 ### Fixed baseline knobs
 
-These are patched into each case but are not optimized: `cp_solid_scale`, `kappa_solid_scale`, `cp_liquid_slope`, `kappa_liquid_slope`, `rho`, `beta_r`, `nu`, `LatentHeat`, `LatentHeatVap`, and `sigma`. `Marangoni_Constant` is still derived as fixed `sigma × dSigmadT_norm`.
+These are patched into each case but are not optimized: `cp_solid_scale`, `kappa_solid_scale`, `cp_liquid_slope`, `kappa_liquid_slope`, `rho`, `beta_r`, `nu`, `LatentHeat`, `LatentHeatVap`, `sigma`, and `dSigmadT_norm`. `Marangoni_Constant` is fixed from the SS316 table as `-4.9e-4 N/m/K`.
 
-SS316 table-derived fixed values: `rho=6881 kg/m3` uses the liquid density because the model has one scalar metal density, `nu=1.1626e-6 m2/s` from dynamic viscosity `8e-3 Pa.s / 6881 kg/m3`, `LatentHeat=2.6e5 J/kg`, `LatentHeatVap=6.336e6 J/kg`, and `sigma=1.87 N/m`. The active `dSigmadT_norm` baseline is table-derived too: `-4.9e-4 / 1.87 = -2.62e-4 K^-1`.
+SS316 table-derived fixed values: `rho=6881 kg/m3` uses the liquid density because the model has one scalar metal density, `nu=1.1626e-6 m2/s` from dynamic viscosity `8e-3 Pa.s / 6881 kg/m3`, `LatentHeat=2.6e5 J/kg`, `LatentHeatVap=6.336e6 J/kg`, and `sigma=1.87 N/m`. `dSigmadT_norm=-2.6203208556e-4 K^-1`, so `1.87 × dSigmadT_norm = -4.9e-4 N/m/K`.
 
 ### Resistivity and liquid kappa
 
