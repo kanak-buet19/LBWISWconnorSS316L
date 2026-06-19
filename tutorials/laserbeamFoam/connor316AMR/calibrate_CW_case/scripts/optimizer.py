@@ -32,10 +32,18 @@ warnings.filterwarnings("ignore", category=ExperimentalWarning)
 class BOOptimizer:
     def __init__(self, pspec: dict, names: list[str], n_init: int,
                  seed: int = 42) -> None:
-        self.names = names
+        self.all_names = names
+        self.fixed = {
+            n: float(pspec[n]["baseline"])
+            for n in names
+            if pspec[n].get("fixed", False)
+        }
+        self.names = [n for n in names if n not in self.fixed]
         self.n_init = n_init
-        self.dists = {n: FloatDistribution(float(pspec[n]["min"]),
-                                           float(pspec[n]["max"])) for n in names}
+        self.dists = {
+            n: FloatDistribution(float(pspec[n]["min"]), float(pspec[n]["max"]))
+            for n in self.names
+        }
         optuna.logging.set_verbosity(optuna.logging.WARNING)
         self.study = optuna.create_study(
             direction="minimize",
@@ -59,7 +67,9 @@ class BOOptimizer:
     # -- ask / tell -------------------------------------------------------- #
     def ask(self) -> tuple[dict, Trial]:
         trial = self.study.ask(self.dists)
-        return {n: float(trial.params[n]) for n in self.names}, trial
+        params = dict(self.fixed)
+        params.update({n: float(trial.params[n]) for n in self.names})
+        return {n: params[n] for n in self.all_names}, trial
 
     def tell(self, trial: Trial, value: float) -> None:
         self.study.tell(trial, value)

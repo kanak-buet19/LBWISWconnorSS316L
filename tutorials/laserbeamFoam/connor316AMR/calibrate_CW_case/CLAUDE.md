@@ -75,43 +75,29 @@ Candidates persist via `runs/cand_XX/result.json`. On resubmit, completed candid
 | `geometry.*` | config | Domain sizing; drives blockMeshDict patching |
 | `control.*` | config | endTime, deltaT, maxCo, writeInterval |
 
-## The 15 calibration parameters
+## Calibration parameters
 
 All live in `constant/transportProperties` and are patched by `caselib.patch_transportProperties`.
 
 ### Table patching (solid/liquid decoupled)
 
-Solid and liquid property ranges are now independent — prevents optimizer from distorting well-known solid DSC data to compensate for uncertain liquid properties:
+Solid and liquid property controls are independent:
 1. `_scale_solid_table` scales only T ≤ Tsolidus=1658K entries by a narrow factor
 2. `_set_liquid_table` sets T ≥ Tliquidus=1723K entries directly (value + slope)
 
-### Scalar parameters
+### Active optimizer knobs
 
 - `elec_resistivity` — controls laser absorption (ITO model), 5e-7–9e-7 Ω·m
-- `rho`, `nu`, `LatentHeat`, `LatentHeatVap` — unchanged from v1
-- `beta_r` — recoil pressure accommodation coefficient, 0.064–0.096
-
-### Solid cp/kappa (narrow — well-known from DSC)
-
-- `cp_solid_scale` — multiplicative on solid cp, 0.97–1.03 (±3%)
-- `kappa_solid_scale` — multiplicative on solid kappa, 0.95–1.05 (±5%)
-
-### Liquid cp/kappa (direct value at Tliquidus — uncertain)
-
 - `cp_liquid_value` — cp at 1723K, 700–900 J/kg/K (baseline 790)
 - `kappa_liquid_value` — kappa at 1723K, 18–38 W/m/K (baseline 26.9)
-- `cp_liquid_slope` — d(cp)/dT, narrow: ±0.02 J/kg/K/K (±3.5% at Tvap)
-- `kappa_liquid_slope` — d(kappa)/dT, narrow: ±0.005 W/m/K/K (±26% at Tvap)
-
-### Surface tension (physically coupled)
-
-- `sigma` — surface tension at Tmelt, 1.5–2.1 N/m
 - `dSigmadT_norm` — normalized dσ/dT = (1/σ)(dσ/dT), -5.5e-4 to -1.0e-4 K⁻¹
-- `Marangoni_Constant` is **derived**: `sigma × dSigmadT_norm` (prevents unrealistic dσ/dT ratios)
-
-### Evaporative cooling
-
 - `LeeCoeff` — volumetric evaporation strength, 0–5e6 1/s
+
+### Fixed baseline knobs
+
+These are patched into each case but are not optimized: `cp_solid_scale`, `kappa_solid_scale`, `cp_liquid_slope`, `kappa_liquid_slope`, `rho`, `beta_r`, `nu`, `LatentHeat`, `LatentHeatVap`, and `sigma`. `Marangoni_Constant` is still derived as fixed `sigma × dSigmadT_norm`.
+
+SS316 table-derived fixed values: `rho=6881 kg/m3` uses the liquid density because the model has one scalar metal density, `nu=1.1626e-6 m2/s` from dynamic viscosity `8e-3 Pa.s / 6881 kg/m3`, `LatentHeat=2.6e5 J/kg`, `LatentHeatVap=6.336e6 J/kg`, and `sigma=1.87 N/m`. The active `dSigmadT_norm` baseline is table-derived too: `-4.9e-4 / 1.87 = -2.62e-4 K^-1`.
 
 ### Resistivity and liquid kappa
 
