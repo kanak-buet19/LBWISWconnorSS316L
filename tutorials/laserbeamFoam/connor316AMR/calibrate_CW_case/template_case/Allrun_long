@@ -30,21 +30,31 @@ postProcessWrittenTime()
 {
     local timeName="$1"
     local vtkFile=""
+    local converted=false
+    local attempt
 
     echo "[DEBUG] Post-processing output time step ${timeName}..."
-    if ! ./foamVTK.sh "$timeName"; then
-        echo "[ERROR] foamVTK.sh failed for time step ${timeName}! Terminating simulation." >&4
-        kill 0
-        exit 1
+    for attempt in 1 2 3
+    do
+        if ./foamVTK.sh "$timeName"; then
+            converted=true
+            break
+        fi
+        echo "[WARN] foamVTK.sh failed for time step ${timeName} (attempt ${attempt}/3)." >&4
+        sleep $((attempt * 5))
+    done
+
+    if ! ${converted}; then
+        echo "[WARN] Skipping meltpool postprocess for time step ${timeName}; solver will continue." >&4
+        return 0
     fi
 
     if ${analyzeMeltpool}; then
         vtkFile="$(latestInternalVTU)"
 
         if [ -z "$vtkFile" ]; then
-            echo "[ERROR] No internal.vtu found after converting time step ${timeName}! Terminating simulation." >&4
-            kill 0
-            exit 1
+            echo "[WARN] No internal.vtu found after converting time step ${timeName}; solver will continue." >&4
+            return 0
         fi
 
         echo "[DEBUG] Running meltpool analysis on ${vtkFile}..."
@@ -52,7 +62,7 @@ postProcessWrittenTime()
             scripts/analyze_meltpool_vtu.py \
             --vtk-file "$vtkFile" \
             --surface-y-um "$surfaceY" \
-            || { echo "[ERROR] Meltpool analysis failed for ${vtkFile}! Terminating simulation." >&4; kill 0; exit 1; }
+            || { echo "[WARN] Meltpool analysis failed for ${vtkFile}; solver will continue." >&4; return 0; }
         echo "[DEBUG] Meltpool analysis completed successfully for ${vtkFile}."
     fi
 }

@@ -9,4 +9,5 @@ cd "$caseDir"
 echo "Removing runs/ and results/ ..."
 rm -rf runs results .mplconfig
 rm -rf scripts/__pycache__
+rm -f ./*.out ./*.err
 echo "Done. template_case/, scripts/, calibration_config.json kept."

@@ -361,6 +361,43 @@ class Calibrator:
         return base.exists() and any(
             (c / "VTK").is_dir() for c in base.iterdir() if c.is_dir())
 
+    def _recoverable_postprocess_failure(self, cid: int, data: dict | None) -> bool:
+        """True for old candidates killed by the per-write VTK conversion bug."""
+        if not data or data.get("status") != "complete":
+            return False
+        if data.get("objective", PENALTY) < PENALTY:
+            return False
+        failed_cases = [
+            name for name, case in data.get("cases", {}).items()
+            if case.get("status") == "failed"
+        ]
+        for name in failed_cases:
+            case_dir = self._cand_dir(cid) / name
+            try:
+                log_text = (case_dir / "log.run").read_text(errors="ignore")
+            except OSError:
+                log_text = ""
+            try:
+                mesh_log = (case_dir / "log.reconstructParMesh").read_text(errors="ignore")
+            except OSError:
+                mesh_log = ""
+            if ("foamVTK.sh failed" in log_text
+                    or "Cannot find file \"boundary\" in directory \"polyMesh\"" in mesh_log):
+                return True
+        return False
+
+    @staticmethod
+    def _sync_runtime_scripts(case_dir: Path) -> None:
+        """Refresh runner/postprocess scripts in resumed cases."""
+        for name in ("Allrun_long", "foamVTK.sh"):
+            src = TEMPLATE / name
+            dst = case_dir / name
+            try:
+                shutil.copy2(src, dst)
+                dst.chmod(src.stat().st_mode)
+            except OSError as exc:
+                log(f"WARN: could not refresh {dst}: {exc}")
+
     def _persist_candidate(self, cid: int) -> None:
         """Write a small result.json so a resubmitted job can skip/restore this
         candidate. Survives strip_heavy (which only deletes VTK/processor/time
@@ -397,7 +434,7 @@ class Calibrator:
         fresh. Candidate dirs are contiguous cand_00, cand_01, ..."""
         if not RUNS.exists():
             return
-        loaded = completed = 0
+        loaded = completed = recovered = 0
         cid = 0
         while (RUNS / f"cand_{cid:02d}").exists():
             rp = self._result_path(cid)
@@ -414,6 +451,11 @@ class Calibrator:
             rec = self.records[cid]
             loaded += 1
             if data and data.get("status") == "complete":
+                if self._recoverable_postprocess_failure(cid, data):
+                    self.resume_ids.append(cid)
+                    recovered += 1
+                    cid += 1
+                    continue
                 rec["objective"] = data.get("objective", float("nan"))
                 rec["status"] = "complete"
                 rec["cases"] = data.get("cases", {})
@@ -435,7 +477,8 @@ class Calibrator:
             cid += 1
         if loaded:
             log(f"RESUME: restored {loaded} candidate(s) "
-                f"({completed} complete, {len(self.resume_ids)} to resume); "
+                f"({completed} complete, {len(self.resume_ids)} to resume, "
+                f"{recovered} recoverable postprocess failures); "
                 f"best so far {self._best_objective()}")
 
     def _cand_params(self, cid: int, data: dict | None) -> dict | None:
@@ -456,6 +499,7 @@ class Calibrator:
         # resume an in-flight sim instead of wiping it; Allrun_long continues
         # from latestTime when processor dirs past t=0 already exist
         if self._case_has_progress(case_dir) and (case_dir / "case_build.json").exists():
+            self._sync_runtime_scripts(case_dir)
             rec = json.loads((case_dir / "case_build.json").read_text())
             log(f"cand {cand_id:02d} {case_cfg['name']} RESUME (existing run)")
         else:
