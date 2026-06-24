@@ -28,7 +28,11 @@
     surfaceScalarField phig
     (
         (
-            mixture.surfaceTensionForce()*fvc::interpolate(damper)
+            (
+                useTdepSigma
+              ? fvc::interpolate(sigmaField/sigma_ref)*mixture.surfaceTensionForce()
+              : mixture.surfaceTensionForce()
+            )*fvc::interpolate(damper)
           +(fvc::interpolate(pVap)
            // Use smoothed interface for recoil force to avoid
            // one-cell pressure spikes on refined keyhole walls.

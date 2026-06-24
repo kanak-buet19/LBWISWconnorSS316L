@@ -1,11 +1,29 @@
 {
   "_comment": "CW single-track 316L calibration. Fit one shared elec_resistivity + LeeCoeff + Marangoni pair across three Hofmann validation cases. All other SS316L thermophysical values are fixed from the Hofmann validation template.",
+  "cases_csv": "exp_cases.csv",
 
   "objective": {
     "_comment": "Per-case error = mean(|depth_err|, |width_err|, |ar_err|). AR = meltPoolDepth / meltPoolWidth. The aspect-ratio term penalizes compensating errors (e.g. depth+10% & width−10% fools plain mean-abs). Candidate objective = mean over all cases. Lower is better.",
     "metric": "mean_abs_rel_error_with_ar",
     "depth_weight": 1.0,
     "width_weight": 1.0
+  },
+
+  "mesh_phases": {
+    "enabled": true,
+    "_comment": "Two-phase mesh refinement. Phase 1: coarse (40um base, maxRefinement=1 -> 20um fine). Phase 2: fine (40um base, maxRefinement=2 -> 10um fine). Phase 2 starts only if Phase 1 best objective < transitionObjective.",
+    "phase1": {
+      "maxRefinement": 1,
+      "nSamples": 64,
+      "initSamples": 16,
+      "transitionObjective": 0.20,
+      "topK": 8
+    },
+    "phase2": {
+      "maxRefinement": 2,
+      "nSamples": 160,
+      "initSamples": 8
+    }
   },
 
   "optimizer": {
@@ -18,6 +36,8 @@
 
   "parameters": {
     "_comment": "Active knobs: elec_resistivity, LeeCoeff, and dSigmadT_norm. Everything else is fixed to the Hofmann validation SS316L baseline. Marangoni_Constant = sigma × dSigmadT_norm.",
+    "power_scale":        {"type": "scalar", "baseline": 1.0,     "min": 0.90,     "max": 1.10,      "_units": "-", "_note": "Global multiplier on nominal laser power across all cases. Same factor applied to all 3 cases."},
+    "radius_scale":       {"type": "scalar", "baseline": 1.0,     "min": 0.85,     "max": 1.15,      "_units": "-", "_note": "Global multiplier on nominal beam radius across all cases. Same factor applied to all 3 cases."},
     "elec_resistivity":   {"type": "scalar", "baseline": 1.1e-6,  "min": 8.0e-7,   "max": 1.5e-6,    "_units": "ohm·m"},
     "cp_solid_scale":     {"type": "scale",  "baseline": 1.0,     "min": 1.0,      "max": 1.0,       "fixed": true, "_units": "-", "_note": "Fixed at baseline. Multiplicative on solid cp table (T ≤ Tsolidus=1658K)."},
     "kappa_solid_scale":  {"type": "scale",  "baseline": 1.0,     "min": 1.0,      "max": 1.0,       "fixed": true, "_units": "-", "_note": "Fixed at baseline. Multiplicative on solid kappa table (T ≤ Tsolidus)."},
@@ -26,7 +46,7 @@
     "cp_liquid_slope":    {"type": "slope",  "baseline": 0.0,     "min": 0.0,      "max": 0.0,       "fixed": true, "_units": "J/kg/K/K", "_note": "Fixed at baseline."},
     "kappa_liquid_slope": {"type": "slope",  "baseline": 0.0,     "min": 0.0,      "max": 0.0,       "fixed": true, "_units": "W/m/K/K", "_note": "Fixed at baseline."},
     "rho":                {"type": "scalar", "baseline": 6881.0,  "min": 6881.0,   "max": 6881.0,    "fixed": true, "_units": "kg/m3", "_note": "Fixed to SS316 liquid density from table (T >= 1723K). Model uses one metal rho scalar, so liquid value is used for melt-pool flow."},
-    "beta_r":             {"type": "scalar", "baseline": 0.08,    "min": 0.08,     "max": 0.08,      "fixed": true, "_units": "-"},
+    "recoil_coeff":       {"type": "scalar", "baseline": 0.54,    "min": 0.54,     "max": 0.54,      "fixed": true, "_units": "-"},
     "nu":                 {"type": "scalar", "baseline": 1.1626e-6, "min": 1.1626e-6, "max": 1.1626e-6, "fixed": true, "_units": "m2/s", "_note": "Fixed from table dynamic viscosity: nu = mu/rho_liq = 8e-3 Pa.s / 6881 kg/m3."},
     "LatentHeat":         {"type": "scalar", "baseline": 260e3,   "min": 260e3,    "max": 260e3,     "fixed": true, "_units": "J/kg"},
     "LatentHeatVap":      {"type": "scalar", "baseline": 7.45e6,  "min": 7.45e6,   "max": 7.45e6,    "fixed": true, "_units": "J/kg"},
@@ -42,6 +62,7 @@
     "x_extent": 512e-6,
     "lead_in": 100e-6,
     "tail": 200e-6,
+    "z_track_m": 0.5e-3,
     "substrate_depth_factor": 2.5,
     "substrate_min": 224e-6,
     "surface_y_um": 128.0

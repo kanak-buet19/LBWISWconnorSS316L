@@ -1,0 +1,4 @@
+case_no,regime,power_W,speed_mm_s,beam_radius_um,exp_width_um,exp_depth_um
+1,conduction,200,1200,26,94.69,73.76
+2,transition,200,900,26,114.60,93.95
+3,keyhole,250,600,26,142.0,204.6

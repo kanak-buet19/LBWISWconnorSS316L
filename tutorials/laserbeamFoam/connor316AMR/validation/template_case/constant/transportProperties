@@ -31,30 +31,29 @@ metal
     LatentHeat 260e3;              // Latent heat of fusion [J/kg]
     beta    1.8e-5;                // Thermal expansion coefficient [1/K]
 
-    table_kappa                    // Metal thermal conductivity table: (T [K], kappa [W/m/K])
+    table_kappa
     (
-        (300    14.68)
-        (500    17.60)
-        (800    21.98)
-        (1200   27.82)
-        (1658   32.51)
-        (1723   30.00)
-        (2500   30.00)
-        (5000   30.00)
+        (300    14.68)    // 0.0146×300 + 10.3 = 14.68 ✓
+        (500    17.60)    // 0.0146×500 + 10.3 = 17.60 ✓
+        (800    21.98)    // 0.0146×800 + 10.3 = 21.98 ✓
+        (1200   27.82)    // 0.0146×1200 + 10.3 = 27.82 ✓
+        (1658   34.51)    // 0.0146×1658 + 10.3 = 34.51 ← fix this
+        (1723   35.46)    // 0.0146×1723 + 10.3 = 35.46 ← add this point
+        (1724   26.90)    // jump to liquid value at liquidus ← fix this
+        (5000   26.90)    // flat in liquid
     );
 
-    table_cp                       // Metal specific heat table: (T [K], cp [J/kg/K])
+    table_cp
     (
-        (300    492.8)
-        (500    540.8)
-        (800    612.8)
-        (1200   708.8)
-        (1658   818.7)
-        (1723   790.0)
-        (2500   790.0)
+        (300    492.8)    // 0.24×300 + 420.8 = 492.8 ✓
+        (500    540.8)    // 0.24×500 + 420.8 = 540.8 ✓
+        (800    612.8)    // 0.24×800 + 420.8 = 612.8 ✓
+        (1200   708.8)    // 0.24×1200 + 420.8 = 708.8 ✓
+        (1658   818.7)    // 0.24×1658 + 420.8 = 818.7 ✓
+        (1723   834.3)    // 0.24×1723 + 420.8 = 834.3 ← add this
+        (1724   790.0)    // jump to liquid value ← fix this
         (5000   790.0)
     );
-
     elec_resistivity	1e-6;      // Electrical resistivity [ohm m]
 }
 
@@ -82,7 +81,7 @@ T_ambient                   300;        // Ambient temperature for convection [K
 h_convection                0;          // Convective heat transfer coefficient [W/m2/K]
 
 sigma            1.87;            // Surface tension [N/m]
-Marangoni_Constant	-4.9e-4;    // d(sigma)/dT for Marangoni force [N/m/K]
+Marangoni_Constant	-4.9e-4;      // Stronger d(sigma)/dT test [N/m/K]
 p0	101325.0;                    // Atmospheric pressure reference [Pa]
 p_amb   101325.0;                 // Ambient chamber pressure used to choose Tvap [Pa]
 recoil_coeff 0.54;               // Recoil pressure Clausius-Clapeyron prefactor [-]
@@ -91,11 +90,11 @@ Tvap_atm    3122;                // Vaporization temperature at p0 [K]
 recoilPressureModel condensation; // condensation or modifiedReducedPressure
 recoilTransitionWidth       10; // Smooth recoil activation width above Tvap [K]
 Mm	0.056;                       // Molar mass [kg/mol]
-LatentHeatVap 7.45e6;            // Latent heat of vaporization [J/kg]
+LatentHeatVap 6.336e6;            // Latent heat of vaporization [J/kg]
 
-LeeCoeff        3e5;              // Lee volumetric evaporation coeff [1/s]
+LeeCoeff        1e5;              // Lee volumetric evaporation coeff [1/s] -- 1e4 for 10um mesh 
 
-V_scan          0.9;            // Scan speed [m/s]
+V_scan          0.9;            // Scan speed (900 mm/s)
 scanDirection   (0 0 1);        // Scanning along +Z direction
 
 // ************************************************************************* //

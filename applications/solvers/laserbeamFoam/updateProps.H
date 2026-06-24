@@ -96,6 +96,22 @@
 
     alpha_smoothed = fvc::average(alpha1);
 
+    if (useTdepSigma)
+    {
+        // Linear σ(T) clamped: constant sigma_ref for T < Tliquidus,
+        // linear for Tliquidus <= T <= Tvap, constant sigma_at_Tvap for T > Tvap
+        sigmaField = max
+        (
+            min
+            (
+                sigma_ref + Marangoni_Constant*(T - sigma_T_ref),
+                sigma_ref
+            ),
+            sigma_at_Tvap
+        );
+        sigmaField.correctBoundaryConditions();
+    }
+
     // Read dynamicMeshDict to select the active refinement criterion
     IOdictionary dynamicMeshDict
     (

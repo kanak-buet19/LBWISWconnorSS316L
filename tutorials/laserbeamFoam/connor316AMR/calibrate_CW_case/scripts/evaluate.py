@@ -40,13 +40,35 @@ def read_series(case_dir: Path) -> list[dict]:
     return rows
 
 
-def _stable(values: list[float], tol: float) -> tuple[float, bool, int]:
-    """Find longest stable tail window.
+def _stable_tail(values: list[float], tol: float,
+                 tail_frac: float = 0.25) -> tuple[float, bool, int]:
+    """Check if the recent tail of the series is stable (used for early-abort during partial data).
 
-    Walk backward from the end; extend while (max-min)/mean < tol.
-    Stop when adding an older point breaks that bound — that's the transient edge.
-    Returns (mean_of_stable_window, converged, n_stable).
-    converged = True only when n_stable >= 2.
+    Uses the last tail_frac fraction of available points (min 2).
+    Returns (mean_of_tail, converged, n_tail).
+    """
+    n = len(values)
+    if n == 0:
+        return float("nan"), False, 0
+    if n == 1:
+        return values[0], False, 1
+    tail_n = max(2, int(n * tail_frac))
+    tail = values[-tail_n:]
+    mean_v = sum(tail) / tail_n
+    if mean_v == 0:
+        return mean_v, False, tail_n
+    var = (max(tail) - min(tail)) / abs(mean_v)
+    return mean_v, var < tol, tail_n
+
+
+def _stable(values: list[float], tol: float) -> tuple[float, bool, int]:
+    """Find the most stable window in the middle of the series.
+
+    Skips first and last 20% of points (transient + end effects).
+    Slides all possible windows of size >= 2 over the middle 60%.
+    Picks the window with lowest (max-min)/mean variation.
+    Returns (mean_of_best_window, converged, n_stable).
+    converged = True when n_stable >= 2 AND variation < tol.
     """
     n = len(values)
     if n == 0:
@@ -54,19 +76,30 @@ def _stable(values: list[float], tol: float) -> tuple[float, bool, int]:
     if n == 1:
         return values[0], False, 1
 
-    stable_n = 1
-    for size in range(2, n + 1):
-        w = values[-size:]
-        mean_v = sum(w) / len(w)
-        if mean_v == 0:
-            break
-        if (max(w) - min(w)) / abs(mean_v) < tol:
-            stable_n = size
-        else:
-            break
+    skip = max(1, n // 5)          # 20% from each end
+    i0 = skip
+    i1 = n - skip                  # exclusive
 
-    w = values[-stable_n:]
-    return sum(w) / len(w), stable_n >= 2, stable_n
+    if i1 - i0 < 2:               # middle too short, use all
+        i0, i1 = 0, n
+
+    best_var = float("inf")
+    best_mean = sum(values[i0:i1]) / (i1 - i0)
+    best_n = i1 - i0
+
+    for size in range(2, i1 - i0 + 1):
+        for i in range(i0, i1 - size + 1):
+            w = values[i : i + size]
+            mean_v = sum(w) / size
+            if mean_v == 0:
+                continue
+            var = (max(w) - min(w)) / abs(mean_v)
+            if var < best_var:
+                best_var = var
+                best_mean = mean_v
+                best_n = size
+
+    return best_mean, best_n >= 2 and best_var < tol, best_n
 
 
 def evaluate(case_dir: Path, exp_depth_um: float, exp_width_um: float,
@@ -112,18 +145,41 @@ def evaluate(case_dir: Path, exp_depth_um: float, exp_width_um: float,
 
 def should_abort(case_dir: Path, exp_depth_um: float, exp_width_um: float,
                  error_threshold: float, stability_tol: float,
-                 min_points: int) -> tuple[bool, str]:
-    """Abort only when the pool has STABILIZED but is still > threshold off."""
-    ev = evaluate(case_dir, exp_depth_um, exp_width_um, stability_tol)
-    if ev["n_points"] < max(min_points, 2):
+                 min_points: int, end_time: float = 0.0,
+                 min_progress: float = 0.70) -> tuple[bool, str]:
+    """Abort only when >= min_progress of sim is done, tail has STABILIZED, and error > threshold.
+
+    Uses tail stability (last 25% of current data) so partial-data polling
+    doesn't falsely trigger on a tiny mid-60% window. Final scoring uses
+    _stable() on the complete dataset after endTime.
+    """
+    series = read_series(case_dir)
+    n = len(series)
+    if n < max(min_points, 2):
         return False, ""
-    if not ev["converged"]:
+    if end_time > 0 and series[-1]["time"] / end_time < min_progress:
         return False, ""
-    worst = max((abs(e) for e in (ev["depth_err"], ev["width_err"], ev.get("ar_err", float("nan")))
-                if e == e), default=0.0)
+    depths = [r["depth"] for r in series]
+    widths = [r["width"] for r in series]
+    depth, d_conv, _ = _stable_tail(depths, stability_tol)
+    width, w_conv, _ = _stable_tail(widths, stability_tol)
+    if not (d_conv and w_conv):
+        return False, ""
+
+    def rel(sim, exp):
+        return float("nan") if not exp else (sim - exp) / exp
+
+    depth_err = rel(depth, exp_depth_um)
+    width_err = rel(width, exp_width_um)
+    exp_ar = exp_depth_um / exp_width_um if exp_width_um else float("nan")
+    sim_ar = depth / width if width else float("nan")
+    ar_err = (abs(sim_ar - exp_ar) / exp_ar
+              if exp_ar and sim_ar == sim_ar and exp_ar == exp_ar
+              else float("nan"))
+
+    worst = max((abs(e) for e in (depth_err, width_err, ar_err) if e == e), default=0.0)
     if worst > error_threshold:
-        return True, (f"stabilized but error {worst*100:.0f}% > "
+        return True, (f"tail stabilized but error {worst*100:.0f}% > "
                       f"{error_threshold*100:.0f}% "
-                      f"(d={ev['sim_depth_um']:.1f} w={ev['sim_width_um']:.1f} "
-                      f"ar={ev.get('ar_err', float('nan')):.3f})")
+                      f"(d={depth:.1f} w={width:.1f} ar={ar_err:.3f})")
     return False, ""

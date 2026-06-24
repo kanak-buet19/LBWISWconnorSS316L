@@ -1,0 +1,47 @@
+#!/bin/bash
+
+set -e
+
+suiteDir="$(cd "$(dirname "$0")" && pwd)"
+cd "$suiteDir"
+
+if [ "$#" -eq 0 ]; then
+    mapfile -t menuCases < <(python3 scripts/setup_cases.py --list)
+    echo "Select case to run:"
+    echo "  0) all"
+    i=1
+    for caseName in "${menuCases[@]}"; do
+        echo "  ${i}) ${caseName}"
+        i=$((i + 1))
+    done
+    printf "choice [0-%d]: " "${#menuCases[@]}"
+    read -r choice
+    if [ -z "$choice" ] || [ "$choice" = "0" ]; then
+        set -- --all
+    elif [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#menuCases[@]}" ]; then
+        set -- --case "${menuCases[$((choice - 1))]}"
+    else
+        echo "Invalid choice: $choice" >&2
+        exit 2
+    fi
+fi
+
+python3 scripts/setup_cases.py "$@"
+
+for arg in "$@"; do
+    if [ "$arg" = "--setup-only" ] || [ "$arg" = "--list-enabled" ] || [ "$arg" = "--list" ]; then
+        exit 0
+    fi
+done
+
+mapfile -t caseNames < <(python3 scripts/setup_cases.py --list "$@")
+
+for caseName in "${caseNames[@]}"; do
+    echo
+    echo "===== Running ${caseName} ====="
+    (
+        cd "cases/${caseName}"
+        ./Allclean_long
+        ./Allrun
+    )
+done

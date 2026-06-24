@@ -1,0 +1,19 @@
+{
+  "name": "tao_Ti64_stationary_156W_r70um",
+  "material": "Ti64",
+  "enabled": true,
+  "exp_tag": "tao",
+  "depth_metric": "keyhole",
+  "base_mesh_size_um": 20,
+  "power_W": 156,
+  "scan_speed_mm_s": 0,
+  "laser_radius_m": 7e-05,
+  "laser_start_z_m": 0.0002,
+  "domain_z_m": 0.0004,
+  "domain_depth_m": 0.00035,
+  "end_time_s": 0.0025,
+  "laser_off_time_s": 0.002,
+  "write_interval_s": 2e-05,
+  "exp_timeseries_csv": "validation_data/156W_140um_Ti64_Stationary.csv",
+  "amr_levels": 2
+}

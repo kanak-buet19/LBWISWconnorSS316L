@@ -45,7 +45,10 @@ if (damperSwitch)
     damper.correctBoundaryConditions();  // ADDED
 }
 
-pVap = 0.54*p0*Foam::exp(LatentHeatVap*Mm*((T - Tvap)/(R*T*Tvap)));
+{
+    const volScalarField T_rc(min(T, T_recoil_cap));
+    pVap = recoil_coeff*p0*Foam::exp(LatentHeatVap*Mm*((T_rc - Tvap)/(R*T_rc*Tvap)));
+}
 pVap.correctBoundaryConditions();  // ADDED
 
 
@@ -84,7 +87,11 @@ if (pimple.momentumPredictor())
         fvc::reconstruct
         (
             (
-                mixture.surfaceTensionForce()*fvc::interpolate(damper)
+                (
+                    useTdepSigma
+                  ? fvc::interpolate(sigmaField/sigma_ref)*mixture.surfaceTensionForce()
+                  : mixture.surfaceTensionForce()
+                )*fvc::interpolate(damper)
                 + (fvc::interpolate(pVap)
                     *fvc::snGrad(alpha1)
                     *fvc::interpolate(damper))

@@ -64,6 +64,13 @@ class BOOptimizer:
             self.study.enqueue_trial(
                 {n_: float(v) for n_, v in zip(self.names, row)}, skip_if_exists=False)
 
+    def seed_points(self, points: list[dict]) -> None:
+        """Enqueue specific parameter dicts as warm-start trials (FIFO before TPE)."""
+        for p in points:
+            self.study.enqueue_trial(
+                {n: float(p[n]) for n in self.names if n in p},
+                skip_if_exists=False)
+
     # -- ask / tell -------------------------------------------------------- #
     def ask(self) -> tuple[dict, Trial]:
         trial = self.study.ask(self.dists)

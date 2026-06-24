@@ -204,6 +204,36 @@ const dimensionedScalar Marangoni_Constant
     transportProperties//.lookup("dsigmadT")
 );
 
+// Temperature-dependent surface tension σ(T) = sigma + Marangoni_Constant*(T - Tliquidus1)
+// Backwards compatible: if Marangoni_Constant is zero, uses constant sigma (original behaviour).
+const dimensionedScalar sigma_ref
+(
+    "sigma_ref",
+    dimensionSet(1, 0, -2, 0, 0, 0, 0),
+    transportProperties.lookupOrDefault<scalar>("sigma", 1.0)
+);
+
+const dimensionedScalar sigma_T_ref("sigma_T_ref", dimTemperature, Tliquidus1.value());
+
+const Switch useTdepSigma
+(
+    transportProperties.lookupOrDefault<Switch>("variableSurfaceTension", false)
+);
+
+volScalarField sigmaField
+(
+    IOobject
+    (
+        "sigmaField",
+        runTime.timeName(),
+        mesh,
+        IOobject::NO_READ,
+        IOobject::NO_WRITE
+    ),
+    mesh,
+    sigma_ref
+);
+
 const dimensionedScalar p0
 (
     "p0",
@@ -223,11 +253,11 @@ const dimensionedScalar p_amb
   : dimensionedScalar("p_amb", p0.dimensions(), p0.value())
 ); // ambient pressure for recoil model
 
-const dimensionedScalar beta_r
+const dimensionedScalar recoil_coeff
 (
-    "beta_r",
+    "recoil_coeff",
     dimless,
-    transportProperties.lookupOrDefault<scalar>("beta_r", 0.08)
+    transportProperties.lookupOrDefault<scalar>("recoil_coeff", 0.54)
 );
 
 const dimensionedScalar Tvap
@@ -249,6 +279,14 @@ const dimensionedScalar Tvap_atm
   : dimensionedScalar("Tvap_atm", Tvap.dimensions(), Tvap.value())
 );
 
+// sigma floor: σ held constant at this value for T > Tvap
+const dimensionedScalar sigma_at_Tvap
+(
+    "sigma_at_Tvap",
+    sigma_ref.dimensions(),
+    sigma_ref.value() + Marangoni_Constant.value()*(Tvap.value() - sigma_T_ref.value())
+);
+
 const dimensionedScalar recoilTransitionWidth
 (
     "recoilTransitionWidth",
@@ -263,6 +301,16 @@ const word recoilPressureModel
         "recoilPressureModel",
         "modifiedReducedPressure"
     )
+);
+
+// Cap on temperature fed to the recoil pressure CC formula.
+// T can rise freely in the energy equation; only pVap evaluation is capped.
+// Default GREAT = no cap (original behaviour).
+const dimensionedScalar T_recoil_cap
+(
+    "T_recoil_cap",
+    dimTemperature,
+    transportProperties.lookupOrDefault<scalar>("T_recoil_cap", GREAT)
 );
 
 const dimensionedScalar Mm

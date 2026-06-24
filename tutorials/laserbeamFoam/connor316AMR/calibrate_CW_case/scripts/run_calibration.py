@@ -43,6 +43,26 @@ RUNS = ROOT / "runs"
 RESULTS = ROOT / "results"
 PENALTY = 9.99
 
+# --------------------------------------------------------------------------- #
+# Terminal colors
+# --------------------------------------------------------------------------- #
+_C = {
+    "reset":   "\033[0m",  "bold":    "\033[1m",  "dim":     "\033[2m",
+    "cyan":    "\033[36m", "green":   "\033[32m", "yellow":  "\033[33m",
+    "red":     "\033[31m", "magenta": "\033[35m", "blue":    "\033[34m",
+    "bcyan":   "\033[1;36m", "bgreen": "\033[1;32m", "bred":  "\033[1;31m",
+    "byellow": "\033[1;33m", "bwhite": "\033[1;37m",
+}
+
+def _c(key: str, text: str) -> str:
+    return f"{_C.get(key, '')}{text}{_C['reset']}"
+
+_SEP = _c("dim", "─" * 70)
+
+# In-place progress tracking
+_progress_lines: int = 0       # lines printed in last progress block
+_log_since_progress: bool = False  # True if log() fired since last progress print
+
 
 # --------------------------------------------------------------------------- #
 # Helpers
@@ -52,6 +72,8 @@ def ts() -> str:
 
 
 def log(msg: str) -> None:
+    global _log_since_progress
+    _log_since_progress = True
     print(f"[{ts()}] {msg}", flush=True)
 
 
@@ -76,6 +98,29 @@ def fmt_value(value: object, fmt: str = ".3f", missing: str = "n/a") -> str:
     if out != out:
         return missing
     return format(out, fmt)
+
+
+def load_cases_csv(path: Path) -> list[dict]:
+    """Load calibration cases from CSV. Columns: case_no, regime, power_W,
+    speed_mm_s, beam_radius_um, exp_width_um, exp_depth_um."""
+    cases = []
+    with path.open(newline="") as fh:
+        for row in csv.DictReader(fh):
+            no = int(row["case_no"])
+            p = float(row["power_W"])
+            v = float(row["speed_mm_s"])
+            r_um = float(row["beam_radius_um"])
+            cases.append({
+                "name": f"case_{no:02d}_P{int(p)}_v{int(v)}",
+                "regime": row.get("regime", ""),
+                "P_laser_W": p,
+                "v_scan_mm_s": v,
+                "d_laser_mm": r_um * 2e-3,
+                "laserRadius_m": r_um * 1e-6,
+                "exp_width_um": float(row["exp_width_um"]),
+                "exp_depth_um": float(row["exp_depth_um"]),
+            })
+    return cases
 
 
 def pspec_keys(pspec: dict) -> list[str]:
@@ -263,6 +308,7 @@ class Job:
         self.case_dir = case_dir
         self.trial = trial   # optuna Trial for sims proposed this run, else None
         self.surface_y_um = geom["surface_y_um"]
+        self.end_time = geom.get("end_time", 0.0)
         self.proc: subprocess.Popen | None = None
         self.started = None
         self.last_sim_t: float | None = None   # latest solver Time seen
@@ -306,7 +352,11 @@ class Job:
 class Calibrator:
     def __init__(self, cfg: dict):
         self.cfg = cfg
-        self.cases = cfg["cases"]
+        cases_csv = cfg.get("cases_csv")
+        if cases_csv:
+            self.cases = load_cases_csv(ROOT / cases_csv)
+        else:
+            self.cases = cfg["cases"]
         self.geom = cfg["geometry"]
         self.control = cfg["control"]
         self.early = cfg["earlyAbort"]
@@ -349,13 +399,30 @@ class Calibrator:
 
         # Bayesian optimization: total evaluation budget + LHS init size
         opt = cfg["optimizer"]
-        self.budget = positive_int(opt["nSamples"], "optimizer.nSamples")
-        self.n_init = positive_int(
-            opt.get("initSamples", min(16, self.budget)),
-            "optimizer.initSamples",
-        )
-        self.n_init = min(self.n_init, self.budget)
         self.seed = int(opt.get("seed", 42))
+
+        # Mesh-phase setup (optional two-phase coarse→fine refinement)
+        mp = cfg.get("mesh_phases", {})
+        self.mesh_phases_enabled = bool(mp.get("enabled", False))
+        self.mesh_phases = mp
+        self.phase = 1
+        self.phase2_triggered = False
+        if self.mesh_phases_enabled:
+            p1 = mp["phase1"]
+            self.max_refinement = int(p1["maxRefinement"])
+            self.budget = positive_int(p1["nSamples"], "mesh_phases.phase1.nSamples")
+            self.n_init = min(
+                positive_int(p1.get("initSamples", 16), "phase1.initSamples"),
+                self.budget)
+        else:
+            self.max_refinement = 2
+            self.budget = positive_int(opt["nSamples"], "optimizer.nSamples")
+            self.n_init = positive_int(
+                opt.get("initSamples", min(16, self.budget)),
+                "optimizer.initSamples",
+            )
+            self.n_init = min(self.n_init, self.budget)
+
         self.opt = BOOptimizer(cfg["parameters"], self.param_names,
                                self.n_init, self.seed)
 
@@ -539,9 +606,12 @@ class Calibrator:
             log(f"cand {cand_id:02d} {case_cfg['name']} RESUME (existing run)")
         else:
             rec = caselib.build_case(TEMPLATE, case_dir, params, case_cfg,
-                                     self.geom, self.control, self.cores_per_sim)
+                                     self.geom, self.control, self.cores_per_sim,
+                                     max_refinement=self.max_refinement)
         return Job(cand_id, params, case_cfg, case_dir,
-                   {"surface_y_um": rec["surface_y_um"]}, trial=trial)
+                   {"surface_y_um": rec["surface_y_um"],
+                    "end_time": rec.get("geometry", {}).get("end_time", 0.0)},
+                   trial=trial)
 
     def _enqueue_resumes(self) -> None:
         """Re-queue candidates that a prior job left in flight."""
@@ -555,8 +625,8 @@ class Calibrator:
                and len(self.queue) + len(self.running) < self.max_parallel):
             params, trial = self.opt.ask()
             cid = self._new_record(params)
-            phase = "INIT" if cid < self.n_init else "BO"
-            log(f"cand {cid:02d} PROPOSE [{phase}] {fmt_params(params)}")
+            phase_lbl = f"P{self.phase}-{'INIT' if cid < self.n_init else 'BO'}"
+            log(_c("dim", f"cand {cid:02d} queued [{phase_lbl}]"))
             self.queue.append(self.build_job(cid, self.cases[0], trial=trial))
 
     def maybe_enqueue_next(self, job: Job) -> None:
@@ -597,14 +667,24 @@ class Calibrator:
     # -- main loop --------------------------------------------------------- #
     def run(self) -> None:
         RESULTS.mkdir(parents=True, exist_ok=True)
-        log(f"=== CW calibration (Bayesian): budget {self.budget} candidates, "
-            f"{self.n_init} LHS init, then TPE ===")
-        log(f"cores: total={self.total_cores} perSim={self.cores_per_sim} "
-            f"-> maxParallel={self.max_parallel}")
+        print(_SEP, flush=True)
+        print(_c("bcyan", "  ◆  CW Calibration  ◆  316L SS  ◆  Bayesian TPE"), flush=True)
+        mesh_info = (f"  mesh=P1({self.mesh_phases['phase1']['maxRefinement']}lvl)"
+                     f"→P2({self.mesh_phases['phase2']['maxRefinement']}lvl)"
+                     if self.mesh_phases_enabled else
+                     f"  maxRef={self.max_refinement}")
+        print(_c("dim",   f"     budget={self.budget}  init={self.n_init}"
+                          f"  cores={self.total_cores}/{self.cores_per_sim}"
+                          f"  parallel={self.max_parallel}"
+                          f"  cases={len(self.cases)}{mesh_info}"), flush=True)
+        print(_SEP, flush=True)
         self._enqueue_resumes()
 
         try:
-            while (len(self.records) < self.budget or self.queue or self.running):
+            while (len(self.records) < self.budget or self.queue or self.running
+                   or (self.mesh_phases_enabled and not self.phase2_triggered)):
+                if self.mesh_phases_enabled:
+                    self._try_phase_transition()
                 self._maybe_propose()
                 self._fill()
                 self._poll_running()
@@ -625,21 +705,45 @@ class Calibrator:
         self._finalize()
 
     def _print_progress(self) -> None:
+        global _progress_lines, _log_since_progress
         if not self.running:
             return
-        end = self.control["endTime"]
-        parts = []
+
+        lines: list[str] = [_SEP]
         for job in self.running:
-            tag = f"c{job.cand_id:02d}/{job.name.split('_')[-1]}"
             pr = sim_progress(job.case_dir)
+            th = thermal_stats(job.case_dir, tail_bytes=20000)
+            end = job.end_time or self.control.get("endTime", 1.0)
+            cid_s = _c("bcyan", f"c{job.cand_id:02d}")
+            name_s = _c("dim", f"{job.name:<28}")
             if pr is None:
-                parts.append(f"{tag} init")
+                lines.append(f"  {cid_s}  {name_s}  {_c('dim', 'initializing...')}")
             else:
                 t, dt = pr
-                pct = 100.0 * t / end if end else 0.0
-                dts = f"{dt:.1e}" if dt is not None else "?"
-                parts.append(f"{tag} {pct:4.1f}% t={t:.2e} dt={dts}")
-        log("   .. " + " | ".join(parts))
+                pct = min(100.0, 100.0 * t / end) if end else 0.0
+                filled = int(pct / 5)
+                bar = _c("green", "█" * filled) + _c("dim", "░" * (20 - filled))
+                pct_s = _c("byellow", f"{pct:5.1f}%")
+                dt_s = (_c("yellow", f"dt={dt:.1e}") if dt is not None
+                        else _c("dim", "dt=?  "))
+                tmax = th["latest_TMax_K"]
+                pvap = th["latest_pVap_kPa"]
+                t_s = _c("red",     f"T={tmax:.0f}K") if tmax == tmax else ""
+                p_s = _c("magenta", f"pVap={pvap:.0f}kPa") if pvap == pvap else ""
+                lines.append(f"  {cid_s}  {name_s}  [{bar}]  {pct_s}  {dt_s}  {t_s}  {p_s}")
+        # pad to max_parallel so block height stays constant (clean overwrite)
+        for _ in range(self.max_parallel - len(self.running)):
+            lines.append("")
+        lines.append(_SEP)
+
+        # cursor-up to overwrite only if no log() fired since last draw
+        if not _log_since_progress and _progress_lines == len(lines):
+            print(f"\033[{_progress_lines}A", end="", flush=True)
+        _log_since_progress = False
+
+        for line in lines:
+            print(f"\033[2K\r{line}", flush=True)
+        _progress_lines = len(lines)
 
     def _fill(self) -> None:
         while self.queue and len(self.running) < self.max_parallel:
@@ -647,9 +751,10 @@ class Calibrator:
             job.start()
             self.running.append(job)
             best = self._best_objective()
-            log(f"cand {job.cand_id:02d} {job.name} START [{fmt_params(job.params)}] "
-                f"| running {len(self.running)}/{self.max_parallel} "
-                f"| done {self.done_count} | best {best}")
+            log(_c("bgreen", f"▶ cand {job.cand_id:02d}") + f"  {job.name}"
+                + _c("dim", f"  running={len(self.running)}/{self.max_parallel}"
+                     f"  done={self.done_count}/{self.budget}"
+                     f"  best={best}"))
 
     def _poll_running(self) -> None:
         still = []
@@ -660,7 +765,8 @@ class Calibrator:
                 abort, why = ev.should_abort(
                     job.case_dir, job.case_cfg["exp_depth_um"],
                     job.case_cfg["exp_width_um"], self.early["errorThreshold"],
-                    self.stability_tol, self.early.get("minPoints", 2))
+                    self.stability_tol, self.early.get("minPoints", 2),
+                    end_time=job.end_time)
                 if abort:
                     job.kill()
                     job.status = "aborted"
@@ -860,21 +966,62 @@ class Calibrator:
 
     def _report_finish(self, job: Job) -> None:
         c = self.records[job.cand_id]["cases"].get(job.name, {})
+        best = self._best_objective()
+        status_col = "bgreen" if job.status == "done" else "bred"
+        status_sym = "✓" if job.status == "done" else "✗"
         if "sim_depth_um" in c:
             d, w = c["sim_depth_um"], c["sim_width_um"]
             de = c["depth_err"] * 100 if c["depth_err"] == c["depth_err"] else float("nan")
             we = c["width_err"] * 100 if c["width_err"] == c["width_err"] else float("nan")
-            ar = c.get("ar_err", float("nan"))
-            ar_pct = ar * 100 if ar == ar else float("nan")
-            conv = "conv" if c.get("converged") else "NOTconv"
-            log(f"cand {job.cand_id:02d} {job.name} {job.status.upper()} "
-                f"d={d:.1f}(exp{c['exp_depth_um']:.1f} {de:+.0f}%) "
-                f"w={w:.1f}(exp{c['exp_width_um']:.1f} {we:+.0f}%) "
-                f"arErr={ar_pct:.0f}% "
-                f"caseErr {c['case_error']:.3f} [{conv}] | best {self._best_objective()}")
+            err = c.get("case_error", float("nan"))
+            log(_c(status_col, f"{status_sym} cand {job.cand_id:02d}") + f"  {job.name}"
+                + f"  d={d:.1f}um({de:+.0f}%)  w={w:.1f}um({we:+.0f}%)"
+                + f"  err={err:.3f}" + _c("dim", f"  best={best}"))
         else:
-            log(f"cand {job.cand_id:02d} {job.name} {job.status.upper()} "
-                f"({job.note}) | best {self._best_objective()}")
+            log(_c(status_col, f"{status_sym} cand {job.cand_id:02d}") + f"  {job.name}"
+                + f"  {job.status.upper()}  {job.note}" + _c("dim", f"  best={best}"))
+
+    def _try_phase_transition(self) -> None:
+        """Switch to Phase 2 (fine mesh) once Phase 1 is fully drained and good enough."""
+        if self.phase2_triggered:
+            return
+        if len(self.records) < self.budget:
+            return  # Phase 1 proposals not exhausted yet
+        if self.queue or self.running:
+            return  # Phase 1 sims still in flight
+
+        self.phase2_triggered = True
+        p2 = self.mesh_phases["phase2"]
+        best_rec = self._best_record()
+        best_obj = best_rec["objective"] if best_rec else float("inf")
+        threshold = float(self.mesh_phases["phase1"]["transitionObjective"])
+
+        if best_obj > threshold:
+            log(_c("yellow", f"Phase 1 done. Best obj={best_obj:.3f} > {threshold:.2f}."
+                             f" Phase 2 skipped — no moderately stable set found."))
+            return
+
+        # Transition
+        self.phase = 2
+        self.max_refinement = int(p2["maxRefinement"])
+        n2 = positive_int(p2["nSamples"], "mesh_phases.phase2.nSamples")
+        n2_init = int(p2.get("initSamples", 8))
+        topK = int(self.mesh_phases["phase1"].get("topK", 8))
+        self.budget = len(self.records) + n2
+
+        # New optimizer for Phase 2, seeded with top Phase 1 params
+        self.opt = BOOptimizer(self.cfg["parameters"], self.param_names,
+                               n2_init, self.seed + 1)
+        top_recs = sorted(
+            [r for r in self.records
+             if r.get("status") == "complete" and r.get("objective", float("inf")) < PENALTY],
+            key=lambda r: r["objective"],
+        )[:topK]
+        if top_recs:
+            self.opt.seed_points([r["params"] for r in top_recs])
+
+        log(_c("bgreen", f"◆ Phase 2 (maxRefinement={self.max_refinement}) start."
+                         f" P1 best={best_obj:.3f}. Seeding {len(top_recs)} top params."))
 
     def _best_record(self) -> dict | None:
         done = [r for r in self.records

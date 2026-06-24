@@ -390,6 +390,15 @@ int main(int argc, char *argv[])
         Info<< "TMax = " << gMax(T.primitiveField())
             << ", pVapMax = " << gMax(pVap.primitiveField()) << endl;
 
+        {
+            const scalarField magUf(mag(U.primitiveField()));
+            const scalarField& alphaPrim(metalMask.primitiveField());
+            const scalar maxUmetal = gMax(magUf * alphaPrim);
+            const scalar maxUgas = gMax(magUf * (scalar(1) - alphaPrim));
+            Info<< "maxU_metal = " << maxUmetal
+                << " m/s, maxU_gas = " << maxUgas << " m/s" << endl;
+        }
+
         runTime.write();
 
         // Write ray paths to VTK files

@@ -1,0 +1,56 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Website:  https://openfoam.org
+    \\  /    A nd           | Version:  6
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      PhaseFieldProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+timeVsLaserPosition
+{
+    file    "$FOAM_CASE/constant/timeVsLaserPosition";
+    outOfBounds clamp;
+}
+
+timeVsLaserPower
+{
+    file    "$FOAM_CASE/constant/timeVsLaserPower";
+    outOfBounds clamp;
+}
+
+// CW single-track 316L bareplate calibration (Hofmann 2026 dataset).
+// P=156W, v=0mm/s, d_laser=0.14mm (radius=70.0um).
+// Short scan in z for fast first-two-write checks.
+pulseLaser false;
+
+V_incident	(0 1 0);
+
+laserRadius 7e-05;  // 140 um spot diameter
+
+N_sub_divisions	1;
+
+nRadial	35; //50
+
+nAngular	240; //360
+
+wavelength	1.070e-6;
+
+e_num_density	5e29;
+//elec_resistivity	1.0e-6;
+
+Radius_Flavour	2.0;
+
+PowderSim false;
+
+useLocalSearch    true;//false;
+
+//N_sub_divisions    6;

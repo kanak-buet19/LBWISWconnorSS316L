@@ -39,10 +39,13 @@ def build_geometry(case: dict, geom: dict, control: dict) -> dict:
     x_extent = geom["x_extent"]
     lead_in = geom["lead_in"]
     tail = geom["tail"]
-    end_time = control["endTime"]
-
     v = case["v_scan_mm_s"] / 1000.0          # m/s
-    scan = v * end_time                        # distance laser travels in window
+    if "z_track_m" in geom:
+        scan = geom["z_track_m"]
+        end_time = scan / v
+    else:
+        end_time = control["endTime"]
+        scan = v * end_time                    # distance laser travels in window
     z0 = lead_in
     z1 = lead_in + scan
     z_extent = round_up_to_base(z1 + tail, base)
@@ -151,6 +154,12 @@ def patch_LaserProperties(path: Path, radius_m: float) -> None:
     path.write_text(_sub_entry(path.read_text(), "laserRadius", g(radius_m)))
 
 
+def patch_dynamicMeshDict(path: Path, max_refinement: int) -> None:
+    t = path.read_text()
+    t = re.sub(r"(maxRefinement\s+)\d+;", rf"\g<1>{max_refinement};", t, count=1)
+    path.write_text(t)
+
+
 def patch_decomposeParDict(path: Path, cores: int) -> None:
     t, n = re.subn(r"(numberOfSubdomains\s+)\d+;", rf"\g<1>{cores};",
                    path.read_text(), count=1)
@@ -231,7 +240,7 @@ def patch_transportProperties(path: Path, params: dict,
 
     # -- scalars -----------------------------------------------------------
     t = _sub_entry(t, "elec_resistivity", g(params["elec_resistivity"]))
-    t = _sub_entry(t, "beta_r", g(params["beta_r"]))
+    t = _sub_entry(t, "recoil_coeff", g(params["recoil_coeff"]))
     t = _sub_entry(t, "sigma", g(params["sigma"]))
     marangoni = params["sigma"] * params["dSigmadT_norm"]
     t = _sub_entry(t, "Marangoni_Constant", g(marangoni))
@@ -262,7 +271,8 @@ def patch_transportProperties(path: Path, params: dict,
 # Top-level builder
 # --------------------------------------------------------------------------- #
 def build_case(template_dir: Path, dest: Path, candidate_params: dict,
-               case_cfg: dict, geom: dict, control: dict, cores: int) -> dict:
+               case_cfg: dict, geom: dict, control: dict, cores: int,
+               max_refinement: int = 2) -> dict:
     if dest.exists():
         shutil.rmtree(dest)
     shutil.copytree(template_dir, dest)
@@ -278,21 +288,27 @@ def build_case(template_dir: Path, dest: Path, candidate_params: dict,
         p.unlink()
 
     geo = build_geometry(case_cfg, geom, control)
+    ctrl = dict(control)
+    ctrl["endTime"] = geo["end_time"]
 
     patch_blockMeshDict(dest / "system" / "blockMeshDict", geo)
     patch_setFieldsDict(dest / "system" / "setFieldsDict", geo)
-    patch_controlDict(dest / "system" / "controlDict", control)
+    patch_controlDict(dest / "system" / "controlDict", ctrl)
+    patch_dynamicMeshDict(dest / "constant" / "dynamicMeshDict", max_refinement)
     patch_decomposeParDict(dest / "system" / "decomposeParDict", cores)
+    P_sim = case_cfg["P_laser_W"] * candidate_params.get("power_scale", 1.0)
+    r_sim = case_cfg["laserRadius_m"] * candidate_params.get("radius_scale", 1.0)
+
     patch_timeVsLaserPosition(dest / "constant" / "timeVsLaserPosition", geo)
-    patch_timeVsLaserPower(dest / "constant" / "timeVsLaserPower",
-                           case_cfg["P_laser_W"], geo["end_time"])
+    patch_timeVsLaserPower(dest / "constant" / "timeVsLaserPower", P_sim, geo["end_time"])
     patch_trackProperties(dest / "constant" / "trackProperties", geo["end_time"])
-    patch_LaserProperties(dest / "constant" / "LaserProperties", case_cfg["laserRadius_m"])
+    patch_LaserProperties(dest / "constant" / "LaserProperties", r_sim)
     patch_transportProperties(dest / "constant" / "transportProperties",
                              candidate_params, case_cfg["v_scan_mm_s"])
 
     record = {"case": case_cfg, "geometry": geo, "params": candidate_params,
-              "cores": cores, "surface_y_um": geom["surface_y_um"]}
+              "cores": cores, "surface_y_um": geom["surface_y_um"],
+              "max_refinement": max_refinement}
     (dest / "case_build.json").write_text(json.dumps(record, indent=2))
     (dest / "exp_summary.csv").write_text(
         "width_um,depth_um\n"

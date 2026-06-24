@@ -1,0 +1,18 @@
+#!/bin/bash
+
+set -e
+
+suiteDir="$(cd "$(dirname "$0")" && pwd)"
+cd "$suiteDir"
+
+for caseDir in cases/*; do
+    [ -d "$caseDir" ] || continue
+    echo "===== Cleaning $(basename "$caseDir") ====="
+    (
+        cd "$caseDir"
+        ./Allclean_long
+    )
+done
+
+echo "Removing generated case folders"
+rm -rf cases
