@@ -626,6 +626,37 @@ void laserHeatSource::updateDeposition
     const volScalarField& resistivity_in
 )
 {
+    // Backward-compatible wrapper: vapor plume attenuation disabled.
+    // T field is unused when vaporAttenuation=false; pass alphaFiltered as dummy.
+    const volScalarField& dummyT = alphaFiltered;
+    updateDeposition
+    (
+        alphaFiltered, nFiltered, resistivity_in,
+        dummyT,
+        0.0, 1.0, 1.0, 1.0, 1.0,   // Lv, Tvap, p_amb, Mm, R — unused
+        false, 0.0, 1.0, 0.0, 1.5   // vaporAttenuation=false
+    );
+}
+
+
+void laserHeatSource::updateDeposition
+(
+    const volScalarField& alphaFiltered,
+    const volVectorField& nFiltered,
+    const volScalarField& resistivity_in,
+    const volScalarField& T,
+    const scalar Lv,
+    const scalar Tvap_val,
+    const scalar p_amb_val,
+    const scalar Mm_val,
+    const scalar R_val,
+    const bool vaporAttenuation,
+    const scalar muAlphaMax,
+    const scalar pVaporMax,
+    const scalar H_plume,
+    const scalar uMax
+)
+{
     Info<< "Updating deposition" << endl;
 
     deposition_ *= 0.0;
@@ -636,6 +667,34 @@ void laserHeatSource::updateDeposition
     rayQ_ *= 0.0;
 
     const scalar time = deposition_.time().value();
+
+    // ---------------------------------------------------------------
+    // Vapor plume Beer-Lambert attenuation (Yang et al. 2026, Eq. 32)
+    // ---------------------------------------------------------------
+    scalar alphaAttenuCoeff = 0.0;
+
+    if (vaporAttenuation)
+    {
+
+        // Domain-integrated Clausius-Clapeyron saturation vapor pressure
+        // p_s(T) = p_amb * exp(Lv/Rsp * (1/Tvap - 1/T))    [Yang Eq. 14]
+        // p_total = integral_domain p_s dV                   [Yang Eq. 32]
+        const scalar Rsp = R_val / max(Mm_val, SMALL);
+        const scalarField& TI = T.primitiveField();
+        const scalarField& VI = T.mesh().cellVolumes();
+        scalar p_total = 0.0;
+        forAll(TI, celli)
+        {
+            const scalar Tc = max(TI[celli], 10.0);  // avoid 1/0
+            p_total += VI[celli]*p_amb_val*Foam::exp(Lv/Rsp*(1.0/Tvap_val - 1.0/Tc));
+        }
+        reduce(p_total, sumOp<scalar>());
+
+        alphaAttenuCoeff = muAlphaMax * min(p_total/max(pVaporMax, SMALL), scalar(1.0));
+
+        Info<< "    Vapor plume attenuation: p_total=" << p_total
+            << " alpha_attennu=" << alphaAttenuCoeff << " [1/m]" << endl;
+    }
 
     forAll(laserNames_, laserI)
     {
@@ -787,6 +846,16 @@ void laserHeatSource::updateDeposition
             dict.lookupOrDefault<scalar>("rayPowerRelTol", 1e-6)
         );
 
+        // Per-laser scanning speed for vapor plume path correction (Eq. 33)
+        scalar uScan = 0.0;
+        if (vaporAttenuation)
+        {
+            const scalar dt = max(deposition_.time().deltaTValue(), 1e-15);
+            const vector posFwd = timeVsLaserPosition_[laserI](time + dt);
+            const vector posBwd = timeVsLaserPosition_[laserI](time - dt);
+            uScan = mag(posFwd - posBwd) / (2.0*dt);
+        }
+
         updateDeposition
         (
             alphaFiltered,
@@ -807,7 +876,12 @@ void laserHeatSource::updateDeposition
             useLocalSearch,
             maxLocalSearch,
             rayPowerRelTol,
-            globalBB_
+            globalBB_,
+            vaporAttenuation,
+            alphaAttenuCoeff,
+            H_plume,
+            uScan,
+            uMax
         );
     }
 
@@ -849,7 +923,12 @@ void laserHeatSource::updateDeposition
     const Switch useLocalSearch,
     const label maxLocalSearch,
     const scalar rayPowerRelTol,
-    const boundBox& globalBB
+    const boundBox& globalBB,
+    const bool vaporAttenuation,
+    const scalar alphaAttenuCoeff,
+    const scalar H_plume,
+    const scalar uScan,
+    const scalar uMax
 )
 {
     const fvMesh& mesh = deposition_.mesh();
@@ -928,6 +1007,11 @@ void laserHeatSource::updateDeposition
     DynamicList<label> finishedRayIDs;
     DynamicList<DynamicList<point>> finishedRayPaths;
 
+    // Vapor plume: laser entry plane is the face where V_incident points inward;
+    // laserEntryProj = dot(laserPosition, vIncidentUnit) is the entry depth reference.
+    const vector vIncidentUnit = V_incident / (mag(V_incident) + VSMALL);
+    const scalar laserEntryProj = currentLaserPosition & vIncidentUnit;
+
     laserRayParticle::trackingData td
     (
         rayCloud,
@@ -942,7 +1026,14 @@ void laserHeatSource::updateDeposition
         angular_frequency,
         rayPowerAbsTol,
         finishedRayIDs,
-        finishedRayPaths
+        finishedRayPaths,
+        vaporAttenuation,
+        alphaAttenuCoeff,
+        H_plume,
+        uScan,
+        uMax,
+        vIncidentUnit,
+        laserEntryProj
     );
 
     // Move all ray particles through the mesh.

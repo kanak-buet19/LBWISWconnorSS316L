@@ -16,8 +16,7 @@ FoamFile
 
 dynamicFvMesh   dynamicRefineFvMesh;
 
-amrCriterion    interfaceGradT;
-gradTrefine     5e6;
+amrCriterion    interfacePersist;
 
 // How often to refine
 refineInterval  20;

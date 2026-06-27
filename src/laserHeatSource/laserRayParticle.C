@@ -57,7 +57,8 @@ Foam::laserRayParticle::laserRayParticle
     bounceCount_(0),
     globalRayIndex_(globalRayIndex),
     active_(true),
-    path_()
+    path_(),
+    s_gas_(0.0)
 {
     path_.append(position);
 }
@@ -79,7 +80,8 @@ Foam::laserRayParticle::laserRayParticle
     bounceCount_(0),
     globalRayIndex_(-1),
     active_(true),
-    path_()
+    path_(),
+    s_gas_(0.0)
 {
     if (readFields)
     {
@@ -89,7 +91,8 @@ Foam::laserRayParticle::laserRayParticle
             >> dA_
             >> bounceCount_
             >> globalRayIndex_
-            >> active_;
+            >> active_
+            >> s_gas_;
     }
 
     is.check(FUNCTION_NAME);
@@ -166,15 +169,26 @@ bool Foam::laserRayParticle::move
 
         // ---- Physics: check for interface or bulk metal ----
 
-        if
-        (
-            mag(nI[cellI]) > 0.5
-         && alphaI[cellI] >= td.depCutoff_
-        )
+        const bool isInMetal = (alphaI[cellI] >= td.depCutoff_);
+        const bool isInterface = isInMetal && (mag(nI[cellI]) > 0.5);
+
+        if (isInterface)
         {
             // ================================================
             // Interface cell - Fresnel reflection/absorption
             // ================================================
+
+            // Beer-Lambert vapor plume attenuation (Yang et al. 2026, Eq. 31-35)
+            if (td.vaporAttenuation_ && td.alphaAttenuCoeff_ > SMALL)
+            {
+                // Eq. 33: first hit adds H_plume factor (vapor above surface);
+                // subsequent hits use only accumulated gas path inside keyhole
+                const scalar s_eff =
+                    (bounceCount_ == 0)
+                  ? s_gas_ + td.H_plume_*(1.0 - min(td.uScan_/max(td.uMax_, SMALL), scalar(1.0)))
+                  : s_gas_;
+                power_ *= Foam::exp(-td.alphaAttenuCoeff_ * s_eff);
+            }
 
             const scalar absorptivity = computeFresnelAbsorptivity
             (
@@ -205,6 +219,7 @@ bool Foam::laserRayParticle::move
             direction_ /= mag(direction_) + VSMALL;
 
             bounceCount_++;
+            s_gas_ = 0.0;  // reset gas path after each reflection
             path_.append(position());
 
             // If power is now below tolerance, kill the ray
@@ -217,11 +232,21 @@ bool Foam::laserRayParticle::move
                 break;
             }
         }
-        else if (alphaI[cellI] >= td.depCutoff_)
+        else if (isInMetal)
         {
             // ================================================
             // Bulk metal - full absorption, ray dies
             // ================================================
+
+            // Beer-Lambert attenuation before bulk deposition
+            if (td.vaporAttenuation_ && td.alphaAttenuCoeff_ > SMALL)
+            {
+                const scalar s_eff =
+                    (bounceCount_ == 0)
+                  ? s_gas_ + td.H_plume_*(1.0 - min(td.uScan_/max(td.uMax_, SMALL), scalar(1.0)))
+                  : s_gas_;
+                power_ *= Foam::exp(-td.alphaAttenuCoeff_ * s_eff);
+            }
 
             td.deposition_[cellI] += power_ / VI[cellI];
             power_ = 0.0;
@@ -235,6 +260,11 @@ bool Foam::laserRayParticle::move
 
         // ---- Track to the next face ----
 
+        // Record position and gas status before tracking so we can
+        // accumulate the gas-phase path for vapor plume attenuation
+        const point posBefore = position();
+        const bool wasGas = !isInMetal;
+
         // Reset stepFraction before each tracking call. We are NOT
         // doing time-based tracking (rays are instantaneous), so
         // stepFraction should not accumulate across cell crossings.
@@ -246,6 +276,12 @@ bool Foam::laserRayParticle::move
         const vector displacement = direction_*maxTrackLength;
 
         trackToAndHitFace(displacement, f, cloud, td);
+
+        // Accumulate gas path length (Yang et al. 2026, Eq. 33: s_ray)
+        if (td.vaporAttenuation_ && wasGas)
+        {
+            s_gas_ += mag(position() - posBefore);
+        }
     }
 
     return td.keepParticle;
@@ -572,7 +608,8 @@ Foam::Ostream& Foam::operator<<
         << token::SPACE << p.dA_
         << token::SPACE << p.bounceCount_
         << token::SPACE << p.globalRayIndex_
-        << token::SPACE << p.active_;
+        << token::SPACE << p.active_
+        << token::SPACE << p.s_gas_;
 
     os.check(FUNCTION_NAME);
     return os;

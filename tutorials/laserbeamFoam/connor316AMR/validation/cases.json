@@ -113,12 +113,14 @@
       "power_W": 156,
       "scan_speed_mm_s": 0,
       "laser_radius_m": 70e-6,
-      "laser_start_z_m": 2e-4,
-      "domain_z_m": 4e-4,
-      "domain_depth_m": 3.5e-4,
+      "laser_start_z_m": 2.5e-4,
+      "domain_x_m": 5e-4,
+      "domain_z_m": 5e-4,
+      "domain_depth_m": 6e-4,
       "end_time_s": 2.5e-3,
       "laser_off_time_s": 2e-3,
-      "write_interval_s": 2e-5,
+      "write_interval_s": 10e-5,
+      "electric_resistivity_values": [9.2e-7],
       "exp_timeseries_csv": "validation_data/156W_140um_Ti64_Stationary.csv"
     },
     {

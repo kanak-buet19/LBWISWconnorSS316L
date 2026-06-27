@@ -163,9 +163,34 @@ int main(int argc, char *argv[])
             #include "updateProps.H"
 
             // Update the laser deposition field
+            // Vapor plume params read from transportProperties (Yang et al. 2026)
+            const bool vaporAttenuation =
+                transportProperties.lookupOrDefault<Switch>("vaporPlumeAttenuation", false);
+            const scalar muAlphaMax =
+                transportProperties.lookupOrDefault<scalar>("muAlphaMax", 310.0);
+            const scalar pVaporMax =
+                transportProperties.lookupOrDefault<scalar>("pVaporMax", 1e-7);
+            const scalar H_plume =
+                transportProperties.lookupOrDefault<scalar>("H_plume", 1e-3);
+            const scalar vaporUMax =
+                transportProperties.lookupOrDefault<scalar>("uMax", 1.5);
+
             laser.updateDeposition
             (
-                alpha_filtered, n_filtered, electrical_resistivity
+                alpha_filtered,
+                n_filtered,
+                electrical_resistivity,
+                T,
+                LatentHeatVap.value(),
+                Tvap.value(),
+                p_amb.value(),
+                Mm.value(),
+                R.value(),
+                vaporAttenuation,
+                muAlphaMax,
+                pVaporMax,
+                H_plume,
+                vaporUMax
             );
 
             mixture.correct();

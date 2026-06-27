@@ -166,6 +166,36 @@
 
         meshRefinementIndicator = max(baseIndicator, neighborIndicator);
     }
+    else if (amrCriterion == "interfacePersist")
+    {
+        // Refine current interface plus the hot metal HAZ, and retain all previously
+        // refined cells. Once a cell is marked, it stays marked permanently.
+        // Needed for keyhole porosity and post-laser heat-affected regions.
+        volScalarField baseIndicator
+        (
+            pos(alpha_smoothed - dimensionedScalar("alphaMin", dimless, 0.001))
+           *pos(dimensionedScalar("alphaMax", dimless, 0.999) - alpha_smoothed)
+        );
+
+        volScalarField neighborIndicator
+        (
+            pos
+            (
+                fvc::average(fvc::interpolate(baseIndicator))
+              - dimensionedScalar("dilateThresh", dimless, SMALL)
+            )
+        );
+
+        volScalarField hazIndicator
+        (
+            pos(alpha_smoothed - dimensionedScalar("alphaMin", dimless, 0.001))
+           *pos(T - (Tsolidus1 - dimensionedScalar("dTrefine", dimTemperature, 300)))
+        );
+
+        // max() with existing field: accumulated markers never reset to 0
+        meshRefinementIndicator =
+            max(meshRefinementIndicator, max(max(baseIndicator, neighborIndicator), hazIndicator));
+    }
     else if (amrCriterion == "interfaceT100")
     {
         meshRefinementIndicator =

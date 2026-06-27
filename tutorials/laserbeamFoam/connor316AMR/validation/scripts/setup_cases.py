@@ -8,6 +8,7 @@ import json
 import math
 import re
 import shutil
+from copy import deepcopy
 from pathlib import Path
 
 
@@ -34,6 +35,83 @@ def replace_regex(path: Path, pattern: str, repl: str) -> None:
 
 def fmt_m(value: float) -> str:
     return f"{value:.6e}"
+
+
+def fmt_param(value: float) -> str:
+    text = f"{value:.6g}"
+    return text.replace("+", "")
+
+
+def resistivity_tag(value: float) -> str:
+    return f"rho{fmt_param(value).replace('-', 'm').replace('.', 'p')}"
+
+
+def parse_resistivity_values(case: dict) -> list[float]:
+    keys = (
+        "electric_resistivity",
+        "electric_resistivity_sweep",
+        "electric_resistivity_values",
+        "elec_resistivity",
+        "elec_resistivity_sweep",
+        "elec_resistivity_values",
+    )
+    present = [key for key in keys if key in case]
+    if not present:
+        return []
+    if len(present) > 1:
+        raise RuntimeError(
+            f"case {case['name']}: set only one electric resistivity key, found {', '.join(present)}"
+        )
+
+    raw = case[present[0]]
+    if isinstance(raw, str):
+        parts = [part.strip() for part in raw.split(",")]
+        values = [float(part) for part in parts if part]
+    elif isinstance(raw, (int, float)):
+        values = [float(raw)]
+    elif isinstance(raw, list):
+        values = [float(value) for value in raw]
+    else:
+        raise RuntimeError(
+            f"case {case['name']}: electric resistivity must be a number, list, or comma-separated string"
+        )
+
+    if not values:
+        raise RuntimeError(f"case {case['name']}: electric resistivity sweep is empty")
+    for value in values:
+        if value <= 0:
+            raise RuntimeError(f"case {case['name']}: electric resistivity must be positive")
+    return values
+
+
+def set_electric_resistivity(case_dir: Path, value: float) -> None:
+    replace_regex(
+        case_dir / "constant" / "transportProperties",
+        r"^(\s*elec_resistivity\s+)[-+0-9.eE]+(\s*;.*)$",
+        rf"\g<1>{fmt_param(value)}\2",
+    )
+
+
+def expand_case_sweeps(cases: list[dict]) -> list[dict]:
+    expanded = []
+    for case in cases:
+        values = parse_resistivity_values(case)
+        if len(values) <= 1:
+            item = deepcopy(case)
+            if values:
+                item["_electric_resistivity_value"] = values[0]
+                item["electric_resistivity_value"] = values[0]
+            expanded.append(item)
+            continue
+
+        for value in values:
+            item = deepcopy(case)
+            item["base_name"] = case["name"]
+            item["name"] = f"{case['name']}_{resistivity_tag(value)}"
+            item["_electric_resistivity_value"] = value
+            item["electric_resistivity_value"] = value
+            expanded.append(item)
+    return expanded
 
 
 def target_tag(case: dict) -> str:
@@ -72,15 +150,20 @@ _SUBSTRATE_MIN_M = 224e-6
 
 
 def resize_domain_depth(case_dir: Path, case: dict) -> None:
-    """Scale substrate Y-extent to 1.5× target_depth_um (min 224 µm), rounded to base cell."""
-    depth_um = case.get("target_depth_um")
-    if depth_um is None:
-        return
+    """Set Y-extent: explicit domain_depth_m overrides auto 1.5×target_depth_um."""
     base_m = float(case.get("base_mesh_size_um", 32.0)) * 1e-6
-    n = max(1, math.ceil(round(_SUBSTRATE_FACTOR * depth_um * 1e-6 / base_m, 6)))
-    n_min = max(1, math.ceil(round(_SUBSTRATE_MIN_M / base_m, 6)))
-    substrate_m = max(n, n_min) * base_m
-    new_y_max = _GAS_M + substrate_m
+    if "domain_depth_m" in case:
+        ny = max(1, round(float(case["domain_depth_m"]) / base_m))
+        new_y_max = ny * base_m
+    elif case.get("target_depth_um") is not None:
+        depth_um = float(case["target_depth_um"])
+        n = max(1, math.ceil(round(_SUBSTRATE_FACTOR * depth_um * 1e-6 / base_m, 6)))
+        n_min = max(1, math.ceil(round(_SUBSTRATE_MIN_M / base_m, 6)))
+        substrate_m = max(n, n_min) * base_m
+        new_y_max = _GAS_M + substrate_m
+        ny = max(1, round(new_y_max / base_m))
+    else:
+        return
 
     block_mesh = case_dir / "system" / "blockMeshDict"
     x_max, old_y_max, z_max = mesh_bounds(block_mesh)
@@ -101,11 +184,45 @@ def resize_domain_depth(case_dir: Path, case: dict) -> None:
         ");"
     )
     text = re.sub(r"vertices\s*\(.*?\);", new_verts, read_text(block_mesh), count=1, flags=re.DOTALL)
-
-    ny = max(1, round(new_y_max / base_m))
     text = re.sub(
         r"(hex\s*\([^)]+\)\s*\(\s*)(\d+)(\s+)(\d+)(\s+)(\d+)(\s*\))",
         lambda m: f"{m.group(1)}{m.group(2)}{m.group(3)}{ny}{m.group(5)}{m.group(6)}{m.group(7)}",
+        text, count=1,
+    )
+    write_text(block_mesh, text)
+
+
+def resize_domain_x(case_dir: Path, case: dict) -> None:
+    """Set X extent to domain_x_m, rounded to base cell."""
+    domain_x_m = case.get("domain_x_m")
+    if domain_x_m is None:
+        return
+    base_m = float(case.get("base_mesh_size_um", 32.0)) * 1e-6
+    nx = max(1, round(float(domain_x_m) / base_m))
+    new_x_max = nx * base_m
+
+    block_mesh = case_dir / "system" / "blockMeshDict"
+    old_x_max, y_max, z_max = mesh_bounds(block_mesh)
+    if abs(old_x_max - new_x_max) < 1e-10:
+        return
+
+    X, Y, Z = fmt_m(new_x_max), fmt_m(y_max), fmt_m(z_max)
+    new_verts = (
+        "vertices\n(\n"
+        f"    (0      0    0    )  // 0\n"
+        f"    ({X}  0    0    )  // 1\n"
+        f"    ({X}  {Y}  0    )  // 2\n"
+        f"    (0      {Y}  0    )  // 3\n"
+        f"    (0      0    {Z}  )  // 4\n"
+        f"    ({X}  0    {Z}  )  // 5\n"
+        f"    ({X}  {Y}  {Z}  )  // 6\n"
+        f"    (0      {Y}  {Z}  )  // 7\n"
+        ");"
+    )
+    text = re.sub(r"vertices\s*\(.*?\);", new_verts, read_text(block_mesh), count=1, flags=re.DOTALL)
+    text = re.sub(
+        r"(hex\s*\([^)]+\)\s*\(\s*)(\d+)(\s+)(\d+)(\s+)(\d+)(\s*\))",
+        lambda m: f"{m.group(1)}{nx}{m.group(3)}{m.group(4)}{m.group(5)}{m.group(6)}{m.group(7)}",
         text, count=1,
     )
     write_text(block_mesh, text)
@@ -218,6 +335,7 @@ def configure_case(case_dir: Path, case: dict) -> None:
     start_z = float(case.get("laser_start_z_m", 0.100e-3))
     configured_end_z = case.get("laser_end_z_m")
     configured_end_time = case.get("end_time_s")
+    configured_laser_off_time = case.get("laser_off_time_s")
     write_interval = float(case.get("write_interval_s", 1e-5))
     if configured_end_z is not None:
         end_z = float(configured_end_z)
@@ -230,6 +348,11 @@ def configure_case(case_dir: Path, case: dict) -> None:
         end_z = start_z + (speed / 1000.0) * end_time
     else:
         raise RuntimeError(f"case {case['name']}: must set either end_time_s or laser_end_z_m")
+    laser_off_time = float(configured_laser_off_time) if configured_laser_off_time is not None else laser_end_time
+    if laser_off_time > end_time:
+        raise RuntimeError(
+            f"case {case['name']}: laser_off_time_s ({laser_off_time:g}) cannot exceed end_time_s ({end_time:g})"
+        )
     name = case["name"]
     job_name = f"cw{power}W{speed}mms"
     summary_name = target_tag(case) if has_target else f"exp_{name}_summary.csv"
@@ -242,6 +365,7 @@ def configure_case(case_dir: Path, case: dict) -> None:
             process_comment += f" Target: depth~{depth:.0f}um."
 
     resize_domain_depth(case_dir, case)
+    resize_domain_x(case_dir, case)
     resize_domain_z(case_dir, case)
     configure_mesh(case_dir, case)
 
@@ -341,9 +465,9 @@ def configure_case(case_dir: Path, case: dict) -> None:
         case_dir / "constant" / "timeVsLaserPower",
         "(\n"
         f"    (0           {power})\n"
-        f"    ({laser_end_time:.4e}      {power})\n"
-        f"    ({laser_end_time + 1e-6:.4e} 0)\n"
-        f"    ({max(end_time, laser_end_time + 5e-6):.4e} 0)\n"
+        f"    ({laser_off_time:.4e}      {power})\n"
+        f"    ({laser_off_time + 1e-6:.4e} 0)\n"
+        f"    ({max(end_time, laser_off_time + 5e-6):.4e} 0)\n"
         ")\n",
     )
 
@@ -367,18 +491,24 @@ def load_config() -> dict:
 def select_cases(cfg: dict, names: list[str], include_all: bool) -> list[dict]:
     use_all = include_all or not cfg.get("run_enabled_only", True)
     cases = cfg["cases"] if use_all else [c for c in cfg["cases"] if c.get("enabled", True)]
+    cases = expand_case_sweeps(cases)
     if not names:
         return cases
 
-    by_name = {c["name"]: c for c in cfg["cases"]}
+    by_name = {c["name"]: c for c in cases}
+    by_base_name: dict[str, list[dict]] = {}
+    for case in cases:
+        by_base_name.setdefault(case.get("base_name", case["name"]), []).append(case)
     selected = []
     missing = []
     for name in names:
         case = by_name.get(name)
-        if case is None:
-            missing.append(name)
-        else:
+        if case is not None:
             selected.append(case)
+        elif name in by_base_name:
+            selected.extend(by_base_name[name])
+        else:
+            missing.append(name)
     if missing:
         available = ", ".join(sorted(by_name))
         raise SystemExit(f"unknown case(s): {', '.join(missing)}\navailable: {available}")
@@ -448,6 +578,8 @@ def main() -> None:
             if not mat_file.exists():
                 raise RuntimeError(f"material transportProperties not found: {mat_file}")
             shutil.copy2(mat_file, case_dir / "constant" / "transportProperties")
+        if "_electric_resistivity_value" in case:
+            set_electric_resistivity(case_dir, case["_electric_resistivity_value"])
         configure_case(case_dir, case)
 
     if args.setup_only:

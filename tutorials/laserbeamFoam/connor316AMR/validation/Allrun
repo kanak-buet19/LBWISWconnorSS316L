@@ -6,7 +6,7 @@ suiteDir="$(cd "$(dirname "$0")" && pwd)"
 cd "$suiteDir"
 
 if [ "$#" -eq 0 ]; then
-    mapfile -t menuCases < <(python3 scripts/setup_cases.py --list)
+    mapfile -t menuCases < <(python3 scripts/setup_cases.py --list-enabled)
     echo "Select case to run:"
     echo "  0) all"
     i=1

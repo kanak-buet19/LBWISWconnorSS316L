@@ -99,4 +99,17 @@ LeeCoeff        0;              // Lee volumetric evaporation coeff [1/s]
                                 // 1e7 = tight clamp (~30 K overshoot)
                                 // Derived from kinetic theory (Lee 1980; Chen+ 2020)
 
+// ---- Vapor plume Beer-Lambert attenuation (Yang et al. 2026 IJHMT, Eq. 31-35) ----
+// When vaporPlumeAttenuation is true, rays lose energy traversing vapor above/inside
+// the keyhole: I_out = I_in * exp(-alpha_attennu * s_eff).
+// alpha_attennu = muAlphaMax * min(p_total/pVaporMax, 1)  [1/m]
+// p_total = domain-integral of Clausius-Clapeyron saturation vapor pressure [Pa·m³].
+// pVaporMax is mesh- and material-dependent — calibrate against known keyhole depth
+// (reduce until simulated depth matches experiment; typical starting range 1e-8 to 1e-6).
+vaporPlumeAttenuation   false;
+muAlphaMax              310;        // [1/m]    per Yang et al. 2026 Table
+pVaporMax               1e-7;       // [Pa·m³]  calibrate per material and mesh resolution
+H_plume                 1e-3;       // [m]      effective plume height above surface
+uMax                    1.5;        // [m/s]    scanning speed above which plume saturates
+
 // ************************************************************************* //

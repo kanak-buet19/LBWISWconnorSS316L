@@ -100,6 +100,10 @@ public:
         //- Accumulated path points for VTK visualisation
         DynamicList<point> path_;
 
+        //- Accumulated gas-phase path length since last metal hit [m]
+        //  Used for vapor plume Beer-Lambert attenuation (Yang et al. 2026, Eq. 33)
+        scalar s_gas_;
+
 
     //- Class used to pass tracking data to the trackToFace function
     class trackingData
@@ -146,6 +150,15 @@ public:
             DynamicList<label>& finishedRayIDs_;
             DynamicList<DynamicList<point>>& finishedRayPaths_;
 
+            // Vapor plume Beer-Lambert attenuation (Yang et al. 2026 IJHMT, Eq. 31-35)
+            bool vaporAttenuation_;
+            scalar alphaAttenuCoeff_;   // [1/m] = mu_alpha^max * min(p_total/p_max, 1)
+            scalar H_plume_;            // [m] max plume height above surface
+            scalar uScan_;              // [m/s] current scanning speed
+            scalar uMax_;               // [m/s] speed above which plume effect saturates
+            vector vIncidentUnit_;      // unit vector of incident ray direction
+            scalar laserEntryProj_;     // dot(laserPosition, vIncidentUnit) [m]
+
 
         // Constructor
         trackingData
@@ -162,7 +175,14 @@ public:
             const scalar angularFrequency,
             const scalar rayPowerAbsTol,
             DynamicList<label>& finishedRayIDs,
-            DynamicList<DynamicList<point>>& finishedRayPaths
+            DynamicList<DynamicList<point>>& finishedRayPaths,
+            const bool vaporAttenuation = false,
+            const scalar alphaAttenuCoeff = 0.0,
+            const scalar H_plume = 0.0,
+            const scalar uScan = 0.0,
+            const scalar uMax = 1.5,
+            const vector& vIncidentUnit = vector(0,1,0),
+            const scalar laserEntryProj = 0.0
         )
         :
             particle::trackingData(cloud),
@@ -177,7 +197,14 @@ public:
             angularFrequency_(angularFrequency),
             rayPowerAbsTol_(rayPowerAbsTol),
             finishedRayIDs_(finishedRayIDs),
-            finishedRayPaths_(finishedRayPaths)
+            finishedRayPaths_(finishedRayPaths),
+            vaporAttenuation_(vaporAttenuation),
+            alphaAttenuCoeff_(alphaAttenuCoeff),
+            H_plume_(H_plume),
+            uScan_(uScan),
+            uMax_(uMax),
+            vIncidentUnit_(vIncidentUnit),
+            laserEntryProj_(laserEntryProj)
         {}
     };
 

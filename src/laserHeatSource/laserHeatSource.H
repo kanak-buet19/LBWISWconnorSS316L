@@ -185,15 +185,35 @@ public:
             return radialPolarHeatSource_;
         }
 
-        //- Update the deposition field for all lasers
-        //  The function takes three arguments
-        //  The filtered volume of metal field  (alphaFiltered), the normal
-        //  vector field nFiltered and the scalar resistivity field
+        //- Update the deposition field (no vapor plume attenuation).
+        //  Backward-compatible overload for compressibleLaserbeamFoam / laserMeltFoam.
         void updateDeposition
         (
             const volScalarField& alphaFiltered,
             const volVectorField& nFiltered,
             const volScalarField& resistivity_in
+        );
+
+        //- Update the deposition field for all lasers.
+        //  Vapor plume Beer-Lambert attenuation (Yang et al. 2026 IJHMT, Eq. 31-35):
+        //  T + material scalars compute domain-integrated saturation vapor pressure;
+        //  vapor model params come from transportProperties (passed by solver).
+        void updateDeposition
+        (
+            const volScalarField& alphaFiltered,
+            const volVectorField& nFiltered,
+            const volScalarField& resistivity_in,
+            const volScalarField& T,
+            const scalar Lv,
+            const scalar Tvap_val,
+            const scalar p_amb_val,
+            const scalar Mm_val,
+            const scalar R_val,
+            const bool vaporAttenuation,
+            const scalar muAlphaMax,
+            const scalar pVaporMax,
+            const scalar H_plume,
+            const scalar uMax
         );
 
         //- Update the deposition for the given laser parameters
@@ -217,7 +237,12 @@ public:
             const Switch useLocalSearch,
             const label maxLocalSearch,
             const scalar rayPowerRelTol,
-            const boundBox& globalBB
+            const boundBox& globalBB,
+            const bool vaporAttenuation,
+            const scalar alphaAttenuCoeff,
+            const scalar H_plume,
+            const scalar uScan,
+            const scalar uMax
         );
 
         //- Const access to the global bounding box

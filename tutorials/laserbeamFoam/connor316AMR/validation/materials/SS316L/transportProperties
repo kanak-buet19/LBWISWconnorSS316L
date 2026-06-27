@@ -101,4 +101,11 @@ LeeCoeff        1e2;              // Lee volumetric evaporation coeff [1/s] -- 1
 V_scan          0.9;            // Scan speed (900 mm/s)
 scanDirection   (0 0 1);        // Scanning along +Z direction
 
+// ---- Vapor plume Beer-Lambert attenuation (Yang et al. 2026 IJHMT, Eq. 31-35) ----
+vaporPlumeAttenuation   false;
+muAlphaMax              310;        // [1/m]    Yang et al. 2026
+pVaporMax               1e-7;       // [Pa·m³]  calibrate vs keyhole depth at one reference case
+H_plume                 1e-3;       // [m]      Yang et al. 2026
+uMax                    1.5;        // [m/s]    Yang et al. 2026
+
 // ************************************************************************* //
