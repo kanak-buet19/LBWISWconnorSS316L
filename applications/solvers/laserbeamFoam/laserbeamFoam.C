@@ -222,6 +222,8 @@ int main(int argc, char *argv[])
         // Update the melt history
         const volScalarField& alphaMetal =
             mesh.lookupObject<volScalarField>("alpha.metal");
+        TmaxHistory = max(TmaxHistory, T);
+        TmaxHistory.correctBoundaryConditions();
         condition = pos(alphaMetal - 0.5) * pos(epsilon1 - 0.5);
         meltHistory += condition;
 

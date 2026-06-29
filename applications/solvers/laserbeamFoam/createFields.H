@@ -424,7 +424,7 @@ volScalarField cp
         runTime.timeName(),
         mesh,
         IOobject::NO_READ,
-        IOobject::AUTO_WRITE//change to no write when working
+        IOobject::NO_WRITE
     ),
     mesh,
     dimensionedScalar("cp", dimensionSet(0, 2, -2, -1, 0), 0.0)
@@ -438,7 +438,7 @@ volScalarField kappa
         runTime.timeName(),
         mesh,
         IOobject::NO_READ,
-        IOobject::AUTO_WRITE//change to no write when working
+        IOobject::NO_WRITE
     ),
     mesh,
     dimensionedScalar("kappa",dimensionSet(1, 1, -3, -1, 0),0.0)
@@ -455,7 +455,7 @@ volScalarField TSolidus
         runTime.timeName(),
         mesh,
         IOobject::NO_READ,
-        IOobject::AUTO_WRITE
+        IOobject::NO_WRITE
     ),
     alpha1*Tsolidus1 + (1.0 - alpha1)*Tsolidus2
 );
@@ -469,7 +469,7 @@ volScalarField TLiquidus
         runTime.timeName(),
         mesh,
         IOobject::NO_READ,
-        IOobject::AUTO_WRITE
+        IOobject::NO_WRITE
     ),
     alpha1*Tliquidus1 + (1.0 - alpha1)*Tliquidus2
 );
@@ -932,6 +932,20 @@ volScalarField meltHistory
     ),
     mesh,
     dimensionedScalar("meltHistory", dimensionSet(0, 0, 0, -0, 0), 0.0)
+);
+
+// Peak temperature reached by each cell over the simulation.
+volScalarField TmaxHistory
+(
+    IOobject
+    (
+        "TmaxHistory",
+        runTime.timeName(),
+        mesh,
+        IOobject::READ_IF_PRESENT,
+        IOobject::AUTO_WRITE
+    ),
+    T
 );
 
 // This variable stores the latest laser track ID that melted each cell
