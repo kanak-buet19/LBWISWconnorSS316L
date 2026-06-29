@@ -1,5 +1,0 @@
-#!/bin/sh
-
-liggghts < input.liggghts
-
-# cp /post/location ../constant
