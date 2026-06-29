@@ -84,6 +84,28 @@ def parse_resistivity_values(case: dict) -> list[float]:
     return values
 
 
+_GAS_PROPS: dict[str, dict] = {
+    "argon": {"nu": 1.40e-5, "kappa": 0.018, "cp": 520},
+    "air":   {"nu": 1.56e-5, "kappa": 0.026, "cp": 1005},
+}
+
+
+def set_shielding_gas(case_dir: Path, gas: str) -> None:
+    props = _GAS_PROPS.get(gas)
+    if props is None:
+        raise RuntimeError(f"Unknown shielding_gas: {gas!r}. Choose from {list(_GAS_PROPS)}")
+    tp = case_dir / "constant" / "transportProperties"
+    replace_regex(tp,
+        r"^(\s*nu\s+)[-+0-9.eE]+(\s*;.*// Gas kinematic viscosity.*)$",
+        rf"\g<1>{props['nu']:.2e}\2")
+    replace_regex(tp,
+        r"^(\s*poly_kappa\s+)\([^)]+\)(\s*;.*// Gas thermal conductivity.*)$",
+        rf"\g<1>({props['kappa']} 0 0 0 0 0 0 0)\2")
+    replace_regex(tp,
+        r"^(\s*poly_cp\s+)\([^)]+\)(\s*;.*// Gas specific heat.*)$",
+        rf"\g<1>({props['cp']} 0.0 0 0 0 0 0 0)\2")
+
+
 def set_electric_resistivity(case_dir: Path, value: float) -> None:
     replace_regex(
         case_dir / "constant" / "transportProperties",
@@ -337,7 +359,19 @@ def configure_case(case_dir: Path, case: dict) -> None:
     configured_end_time = case.get("end_time_s")
     configured_laser_off_time = case.get("laser_off_time_s")
     write_interval = float(case.get("write_interval_s", 1e-5))
-    if configured_end_z is not None:
+    if configured_end_z is not None and configured_end_time is not None:
+        end_z = float(configured_end_z)
+        laser_end_time = (end_z - start_z) / (speed / 1000.0)
+        end_time = float(configured_end_time)
+        if end_time < laser_end_time:
+            laser_end_time = end_time
+            end_z = start_z + (speed / 1000.0) * laser_end_time
+            print(
+                f"case {case['name']}: end_time_s is shorter than laser_end_z_m travel time; "
+                f"using end_time_s-derived laser end z = {end_z:.6g} m"
+            )
+        case["end_time_s"] = end_time
+    elif configured_end_z is not None:
         end_z = float(configured_end_z)
         laser_end_time = (end_z - start_z) / (speed / 1000.0)
         end_time = laser_end_time
@@ -578,6 +612,8 @@ def main() -> None:
             if not mat_file.exists():
                 raise RuntimeError(f"material transportProperties not found: {mat_file}")
             shutil.copy2(mat_file, case_dir / "constant" / "transportProperties")
+        gas = case.get("shielding_gas", cfg.get("shielding_gas", "argon"))
+        set_shielding_gas(case_dir, gas)
         if "_electric_resistivity_value" in case:
             set_electric_resistivity(case_dir, case["_electric_resistivity_value"])
         configure_case(case_dir, case)

@@ -4,6 +4,32 @@ set -e
 
 . "$WM_PROJECT_DIR/bin/tools/RunFunctions"
 
+is_numeric_time()
+{
+    [[ "$1" =~ ^([0-9]+|[0-9]*\.[0-9]+)([eE][-+]?[0-9]+)?$ ]]
+}
+
+remove_reconstructed_time()
+{
+    local timeName="$1"
+    if [ "$timeName" = "0" ] || ! is_numeric_time "$timeName"; then
+        return
+    fi
+    if [ -d "$timeName" ]; then
+        echo "[DEBUG] Removing reconstructed root time directory ${timeName}..."
+        rm -rf -- "$timeName"
+    fi
+}
+
+remove_reconstructed_times()
+{
+    find . -maxdepth 1 -type d -printf '%f\n' \
+        | awk '$1 != "0" && $1 ~ /^([0-9]+|[0-9]*\.[0-9]+)([eE][-+]?[0-9]+)?$/ {print}' \
+        | while IFS= read -r timeName; do
+            remove_reconstructed_time "$timeName"
+        done
+}
+
 if [ "$#" -gt 0 ] && [ "$1" = "all" ]; then
     echo "[DEBUG] Reconstructing all time steps and converting to VTK..."
     rm -f log.reconstructParMesh log.reconstructPar log.foamToVTK
@@ -26,6 +52,8 @@ if [ "$#" -gt 0 ] && [ "$1" = "all" ]; then
 
     echo "[DEBUG] Running foamToVTK..."
     foamToVTK -useTimeName >> log.foamToVTK 2>&1 || { echo "[ERROR] foamToVTK failed! Exiting."; exit 1; }
+
+    remove_reconstructed_times
 
     echo "[DEBUG] All reconstructions and VTK conversions completed successfully."
     exit 0
@@ -63,3 +91,5 @@ reconstructPar -time "$timeName" >> log.reconstructPar 2>&1 || { echo "[ERROR] r
 
 echo "[DEBUG] Running foamToVTK for time step ${timeName}..."
 foamToVTK -time "$timeName" -useTimeName >> log.foamToVTK 2>&1 || { echo "[ERROR] foamToVTK failed for time ${timeName}! Exiting."; exit 1; }
+
+remove_reconstructed_time "$timeName"

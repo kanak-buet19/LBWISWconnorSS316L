@@ -72,11 +72,11 @@ gas
 {
     transportModel  Newtonian;     // Viscosity model for the gas phase
 
-    nu              1.48e-05;      // Kinematic viscosity [m2/s]
+    nu              1.40e-05;      // Gas kinematic viscosity [m2/s]
 
     rho             1;             // Density [kg/m3]
 
-    poly_kappa   (0.04 0 0 0 0 0 0 0);       // Gas thermal conductivity polynomial [W/m/K]
+    poly_kappa   (0.018 0 0 0 0 0 0 0);      // Gas thermal conductivity polynomial [W/m/K]
     poly_cp   (520 0.0 0 0 0 0 0 0);         // Gas specific heat polynomial [J/kg/K]
 
     Tsolidus    1.0;              // Dummy gas solidus temperature [K]
@@ -112,7 +112,7 @@ scanDirection   (0 0 1);        // Scanning along +Z direction
 // ---- Vapor plume Beer-Lambert attenuation (Yang et al. 2026 IJHMT, Eq. 31-35) ----
 vaporPlumeAttenuation   true;
 muAlphaMax              310;        // [1/m]    Yang et al. 2026
-pVaporMax               1e-8;       // [Pa·m³]  calibrate vs keyhole depth at one reference case (Original 1e-7)
+pVaporMax               8e-8;       // [Pa·m³]  calibrate vs keyhole depth at one reference case (Original 1e-7)
 H_plume                 1e-3;       // [m]      Yang et al. 2026
 uMax                    1.5;        // [m/s]    Yang et al. 2026
 
