@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ffmpeg -i /home/kanak/coding_ubuntu/LPBF_solvers/LaserbeamFoam_AMR/tutorials/laserbeamFoam/connor316AMR/validation/videos/video_1_250W_600mms_50umD.avi -vf \"fps=1,select='eq\\(n,0\\)+eq\\(n,5\\)+eq\\(n,10\\)+eq\\(n,20\\)'\" -vsync vfr /tmp/vframe_%02d.png)",
+      "Bash(ffprobe -v quiet -show_streams /home/kanak/coding_ubuntu/LPBF_solvers/LaserbeamFoam_AMR/tutorials/laserbeamFoam/connor316AMR/validation/videos/video_1_250W_600mms_50umD.avi)",
+      "Bash(ffmpeg -i /home/kanak/coding_ubuntu/LPBF_solvers/LaserbeamFoam_AMR/tutorials/laserbeamFoam/connor316AMR/validation/videos/video_1_250W_600mms_50umD.avi -vf \"select='eq\\(n,0\\)+eq\\(n,36\\)+eq\\(n,72\\)+eq\\(n,108\\)+eq\\(n,145\\)'\" -vsync vfr /tmp/vframe_%02d.png -y)",
+      "Read(//tmp/**)",
+      "WebFetch(domain:www.science.org)",
+      "WebFetch(domain:www.esrf.fr)",
+      "WebFetch(domain:www.researchgate.net)",
+      "WebFetch(domain:insidemetaladditivemanufacturing.com)",
+      "Bash(python3 -c \"import PIL; print\\('PIL ok'\\)\")",
+      "Bash(python3 scripts/setup_cases.py --list)",
+      "Bash(python3 scripts/setup_cases.py --case wang_Ti6Al4V_382W_475mms_r50um --setup-only)",
+      "Bash(python3 scripts/setup_cases.py --case wang_Ti6Al4V_382W_475mms_r50um --setup-only --rebuild)",
+      "Bash(python3 scripts/setup_cases.py --case cw_scantrack_200W_900mms_2026_06_14 --setup-only --rebuild)",
+      "Bash(git -C /home/kanak/coding_ubuntu/LPBF_solvers/LaserbeamFoam_AMR diff applications/solvers/laserbeamFoam/laserbeamFoam.C)",
+      "Bash(python3 scripts/setup_cases.py --setup-only --case amb2022_Ti64_stationary_501W --case amb2022_Ti64_scanned_473W_700mms)"
+    ]
+  }
+}
