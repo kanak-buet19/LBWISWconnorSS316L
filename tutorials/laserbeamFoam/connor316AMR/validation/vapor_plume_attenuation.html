@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Vapor Plume Beer–Lambert Attenuation — laserbeamFoam</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" crossorigin="anonymous">
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js" crossorigin="anonymous"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" crossorigin="anonymous"
+    onload="renderMathInElement(document.body, {
+      delimiters: [
+        {left:'$$', right:'$$', display:true},
+        {left:'$', right:'$', display:false}
+      ]
+    })">
+  </script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      background: #f0f4f8;
+      padding: 28px;
+      color: #1a202c;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    h1 {
+      font-size: 21px;
+      font-weight: 700;
+      color: #2d3748;
+      margin-bottom: 4px;
+    }
+    .subtitle {
+      font-size: 12px;
+      color: #718096;
+      margin-bottom: 22px;
+    }
+    code { font-family: 'Courier New', monospace; font-size: 12px; }
+
+    /* ---------- two-column layout ---------- */
+    .layout {
+      display: flex;
+      gap: 22px;
+      align-items: flex-start;
+    }
+
+    /* ---------- SVG diagram card ---------- */
+    .diagram-card {
+      flex: 0 0 420px;
+      background: white;
+      border-radius: 10px;
+      padding: 14px 14px 10px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.09);
+    }
+    .card-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #4a5568;
+      text-align: center;
+      margin-bottom: 8px;
+    }
+
+    /* ---------- equations column ---------- */
+    .eqs-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 13px;
+      min-width: 0;
+    }
+    .eq-card {
+      background: white;
+      border-radius: 8px;
+      padding: 14px 18px 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+      border-left: 4px solid #4299e1;
+    }
+    .eq-card:nth-child(1) { border-left-color: #4299e1; }
+    .eq-card:nth-child(2) { border-left-color: #48bb78; }
+    .eq-card:nth-child(3) { border-left-color: #ed8936; }
+    .eq-card:nth-child(4) { border-left-color: #e53e3e; }
+
+    .eq-label {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      margin-bottom: 6px;
+    }
+    .eq-card:nth-child(1) .eq-label { color: #2b6cb0; }
+    .eq-card:nth-child(2) .eq-label { color: #276749; }
+    .eq-card:nth-child(3) .eq-label { color: #c05621; }
+    .eq-card:nth-child(4) .eq-label { color: #c53030; }
+
+    .eq-body { margin: 4px 0 8px; }
+
+    .eq-note {
+      font-size: 12px;
+      color: #4a5568;
+      line-height: 1.55;
+    }
+    .eq-note p { margin-top: 4px; }
+
+    .ptag {
+      display: inline-block;
+      background: #ebf8ff;
+      color: #2b6cb0;
+      border: 1px solid #bee3f8;
+      border-radius: 3px;
+      padding: 0 5px;
+      font-size: 11px;
+      font-family: 'Courier New', monospace;
+      font-weight: 700;
+    }
+
+    /* KaTeX overrides */
+    .katex-display { margin: 6px 0 !important; overflow-x: auto; }
+
+    /* ---------- footer ---------- */
+    .footer {
+      margin-top: 18px;
+      font-size: 11px;
+      color: #a0aec0;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Vapor Plume Beer–Lambert Attenuation</h1>
+<div class="subtitle">
+  <code>src/laserHeatSource/laserRayParticle.C</code> +
+  <code>laserHeatSource.C</code> &nbsp;·&nbsp; Yang et al. 2026 IJHMT, Eq. 31–35
+</div>
+
+<div class="layout">
+
+  <!-- ============================================================
+       SVG DIAGRAM
+       ============================================================ -->
+  <div class="diagram-card">
+    <div class="card-title">Physical model — ray cross-section</div>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 392 530" width="392" height="530">
+      <defs>
+        <linearGradient id="bG" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#ffd700" stop-opacity="0.45"/>
+          <stop offset="100%" stop-color="#ff9500" stop-opacity="0.80"/>
+        </linearGradient>
+        <radialGradient id="pG" cx="50%" cy="58%" r="50%">
+          <stop offset="0%"   stop-color="#90cdf4" stop-opacity="0.60"/>
+          <stop offset="65%"  stop-color="#90cdf4" stop-opacity="0.25"/>
+          <stop offset="100%" stop-color="#90cdf4" stop-opacity="0.00"/>
+        </radialGradient>
+        <linearGradient id="mG" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stop-color="#5a6a7a"/>
+          <stop offset="100%" stop-color="#384756"/>
+        </linearGradient>
+        <!-- arrow markers -->
+        <marker id="a0" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+          <path d="M0,0 L10,5 L0,10z" fill="#2d3748"/>
+        </marker>
+        <marker id="a0r" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+          <path d="M10,0 L0,5 L10,10z" fill="#2d3748"/>
+        </marker>
+        <marker id="aB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+          <path d="M0,0 L10,5 L0,10z" fill="#2b6cb0"/>
+        </marker>
+        <marker id="aBr" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+          <path d="M10,0 L0,5 L10,10z" fill="#2b6cb0"/>
+        </marker>
+      </defs>
+
+      <!-- GAS region -->
+      <rect x="0" y="0" width="392" height="262" fill="#edf6fc"/>
+      <!-- METAL substrate -->
+      <rect x="0" y="262" width="392" height="268" fill="url(#mG)"/>
+      <!-- surface line -->
+      <line x1="0" y1="262" x2="392" y2="262" stroke="#2d3748" stroke-width="2"/>
+
+      <!-- KEYHOLE -->
+      <path d="M175,262 Q162,335 178,395 Q190,435 198,438 Q206,435 218,395 Q234,335 221,262Z"
+            fill="#0d1b2a"/>
+
+      <!-- LASER BEAM (triangle) -->
+      <polygon points="140,0 256,0 198,262" fill="url(#bG)" opacity="0.62"/>
+      <line x1="140" y1="0" x2="198" y2="262" stroke="#ffa500" stroke-width="1.5" opacity="0.75"/>
+      <line x1="256" y1="0" x2="198" y2="262" stroke="#ffa500" stroke-width="1.5" opacity="0.75"/>
+      <text x="258" y="20" font-family="Arial,sans-serif" font-size="12" fill="#b7791f" font-weight="bold">Laser</text>
+
+      <!-- VAPOR PLUME ellipse -->
+      <ellipse cx="198" cy="197" rx="60" ry="68" fill="url(#pG)"/>
+      <ellipse cx="198" cy="197" rx="60" ry="68" fill="none"
+               stroke="#63b3ed" stroke-width="1.5" stroke-dasharray="6,4"/>
+
+      <!-- "Vapor plume" label + pointer -->
+      <text x="12" y="160" font-family="Arial,sans-serif" font-size="12" fill="#2c5282" font-weight="bold">Vapor</text>
+      <text x="12" y="175" font-family="Arial,sans-serif" font-size="12" fill="#2c5282" font-weight="bold">plume</text>
+      <line x1="62" y1="165" x2="140" y2="183" stroke="#2c5282" stroke-width="1.2"
+            marker-end="url(#aB)"/>
+
+      <!-- RAY: above plume (solid red) -->
+      <line x1="166" y1="0" x2="177" y2="130" stroke="#c53030" stroke-width="2.2"/>
+      <!-- RAY: through plume (dashed = Beer-Lambert attenuated) -->
+      <line x1="177" y1="130" x2="189" y2="262" stroke="#c53030" stroke-width="2.2"
+            stroke-dasharray="7,3"/>
+      <!-- RAY: inside keyhole gas (s_gas accumulating) -->
+      <line x1="189" y1="262" x2="195" y2="338" stroke="#c05621" stroke-width="2.0"
+            stroke-dasharray="4,3"/>
+      <!-- hit dot -->
+      <circle cx="195" cy="341" r="5.5" fill="#c53030"/>
+      <text x="203" y="346" font-family="Arial,sans-serif" font-size="11" fill="#c53030">absorbed / reflected</text>
+
+      <!-- s_gas double-arrow (inside keyhole) -->
+      <line x1="148" y1="262" x2="154" y2="341"
+            stroke="#2b6cb0" stroke-width="1.8"
+            marker-start="url(#aBr)" marker-end="url(#aB)"/>
+      <!-- s_gas label -->
+      <text x="90" y="296" font-family="Georgia,serif" font-size="13" fill="#2b6cb0" font-style="italic">s</text>
+      <text x="99" y="300" font-family="Arial,sans-serif" font-size="9" fill="#2b6cb0">gas</text>
+      <line x1="108" y1="294" x2="145" y2="300" stroke="#2b6cb0" stroke-width="1" stroke-dasharray="3,2"/>
+
+      <!-- H_plume double-arrow: surface (198,262) → top of ellipse (198,129) -->
+      <line x1="285" y1="129" x2="285" y2="262"
+            stroke="#2d3748" stroke-width="1.8"
+            marker-start="url(#a0r)" marker-end="url(#a0)"/>
+      <!-- reference dashes -->
+      <line x1="258" y1="129" x2="287" y2="129" stroke="#2d3748" stroke-width="1" stroke-dasharray="3,2"/>
+      <line x1="198" y1="262" x2="287" y2="262" stroke="#2d3748" stroke-width="1" stroke-dasharray="3,2"/>
+      <!-- H_plume label -->
+      <text x="291" y="188" font-family="Georgia,serif" font-size="13" fill="#2d3748" font-style="italic">H</text>
+      <text x="301" y="192" font-family="Arial,sans-serif" font-size="9"  fill="#2d3748">plume</text>
+      <text x="291" y="207" font-family="Arial,sans-serif" font-size="11" fill="#718096">= 1 mm</text>
+
+      <!-- scan velocity arrow -->
+      <line x1="308" y1="85" x2="378" y2="85" stroke="#2d3748" stroke-width="2" marker-end="url(#a0)"/>
+      <text x="308" y="74" font-family="Georgia,serif" font-size="13" fill="#2d3748" font-style="italic">u</text>
+      <text x="318" y="77" font-family="Arial,sans-serif" font-size="9"  fill="#2d3748">scan</text>
+      <!-- u_max note -->
+      <text x="295" y="108" font-family="Arial,sans-serif" font-size="9.5" fill="#718096">u ≥ u</text>
+      <text x="320" y="111" font-family="Arial,sans-serif" font-size="7"   fill="#718096">max</text>
+      <text x="329" y="108" font-family="Arial,sans-serif" font-size="9.5" fill="#718096">→ plume</text>
+      <text x="295" y="120" font-family="Arial,sans-serif" font-size="9.5" fill="#718096">deflects, H</text>
+      <text x="349" y="123" font-family="Arial,sans-serif" font-size="7"   fill="#718096">plume</text>
+      <text x="368" y="120" font-family="Arial,sans-serif" font-size="9.5" fill="#718096">→ 0</text>
+
+      <!-- region labels -->
+      <text x="4"  y="42"  font-family="Arial,sans-serif" font-size="12" fill="#718096">Gas / ambient</text>
+      <text x="4"  y="258" font-family="Arial,sans-serif" font-size="10" fill="#718096">Surface (y = 128 µm)</text>
+      <text x="8"  y="488" font-family="Arial,sans-serif" font-size="13" fill="#e2e8f0" font-weight="bold">Metal substrate</text>
+
+      <!-- Keyhole label + pointer -->
+      <text x="320" y="400" font-family="Arial,sans-serif" font-size="11" fill="#a0aec0">Keyhole</text>
+      <line x1="320" y1="395" x2="228" y2="365" stroke="#a0aec0" stroke-width="1" marker-end="url(#aB)"/>
+
+      <!-- Legend -->
+      <rect x="2" y="2" width="155" height="64" rx="4"
+            fill="white" fill-opacity="0.88" stroke="#e2e8f0"/>
+      <line x1="10" y1="18" x2="46" y2="18" stroke="#c53030" stroke-width="2.2"/>
+      <text x="51" y="22" font-family="Arial,sans-serif" font-size="11" fill="#2d3748">Pre-plume ray</text>
+      <line x1="10" y1="34" x2="46" y2="34" stroke="#c53030" stroke-width="2.2" stroke-dasharray="7,3"/>
+      <text x="51" y="38" font-family="Arial,sans-serif" font-size="11" fill="#2d3748">Through plume (exp(−αs))</text>
+      <line x1="10" y1="50" x2="46" y2="50" stroke="#c05621" stroke-width="2.0" stroke-dasharray="4,3"/>
+      <text x="51" y="54" font-family="Arial,sans-serif" font-size="11" fill="#2d3748">In keyhole gas (s_gas)</text>
+      <circle cx="150" cy="64" r="0"/><!-- spacer -->
+    </svg>
+  </div><!-- end diagram-card -->
+
+
+  <!-- ============================================================
+       EQUATIONS COLUMN
+       ============================================================ -->
+  <div class="eqs-col">
+
+    <!-- ① domain vapor pressure -->
+    <div class="eq-card">
+      <div class="eq-label">① Domain-integrated vapour pressure (once per timestep)</div>
+      <div class="eq-body">
+        $$p_{\text{total}} = \sum_{\text{cells}} V_c \cdot p_{\text{amb}} \cdot
+          \exp\!\left[\frac{L_v}{R_{\text{sp}}} \left(\frac{1}{T_{\text{vap}}} - \frac{1}{T_c}\right)\right]
+          \quad [\text{Pa·m}^3]$$
+      </div>
+      <div class="eq-note">
+        <p>Clausius–Clapeyron saturation vapour pressure summed over the whole domain.
+           $R_{\text{sp}} = R/M_m$ (specific gas constant).</p>
+        <p>Physically: measures <em>how much vapour has evaporated</em> across the entire domain.</p>
+        <p><span class="ptag">pVaporMax</span> $= 8\times10^{-8}$ Pa·m³ — reference level at which
+           $\alpha$ saturates to its maximum value.
+           Decrease to make attenuation kick in earlier.</p>
+      </div>
+    </div>
+
+    <!-- ② attenuation coefficient -->
+    <div class="eq-card">
+      <div class="eq-label">② Plume attenuation coefficient α (once per timestep)</div>
+      <div class="eq-body">
+        $$\alpha = \mu_{\alpha,\max} \cdot \min\!\left(\frac{p_{\text{total}}}{p_{\text{vapor,max}}},\; 1\right)
+          \quad [\text{m}^{-1}]$$
+      </div>
+      <div class="eq-note">
+        <p>Linearly ramps from $0$ to <span class="ptag">muAlphaMax</span> $= 310\ \text{m}^{-1}$
+           as vapour builds up, then saturates.</p>
+        <p>$\alpha = 0$: plume transparent. &nbsp;
+           $\alpha = 310\ \text{m}^{-1}$ with $s_\text{eff}=1\ \text{mm}$:
+           $P_\text{out}/P_\text{in} = e^{-0.31} \approx 0.73$ (27 % power lost to plume).</p>
+      </div>
+    </div>
+
+    <!-- ③ effective path length -->
+    <div class="eq-card">
+      <div class="eq-label">③ Effective plume path length s_eff (per ray, per hit)</div>
+      <div class="eq-body">
+        $$s_{\text{eff}} = \begin{cases}
+          s_{\text{gas}} + H_{\text{plume}}\!\left(1 - \min\!\left(\dfrac{u_{\text{scan}}}{u_{\text{max}}},1\right)\right)
+          & \text{first bounce (ambient → surface)} \\[8pt]
+          s_{\text{gas}}
+          & \text{subsequent bounces (inside keyhole)}
+        \end{cases}$$
+      </div>
+      <div class="eq-note">
+        <p>$s_{\text{gas}}$ = actual gas-path length the ray has travelled in gas cells since its last
+           reflection (accumulated in <code>laserRayParticle.C</code>, reset to 0 after each bounce).</p>
+        <p><span class="ptag">H_plume</span> $= 1\ \text{mm}$ — virtual extra column of vapour
+           <em>above</em> the simulation surface, only added for the first ray hit.</p>
+        <p><span class="ptag">uMax</span> $= 1.5\ \text{m/s}$ — scan speed above which
+           motion sweeps the plume aside, reducing $H_{\text{plume}}$ contribution to zero.
+           At $u_{\text{scan}} = 0$ (stationary spot): full $H_{\text{plume}}$ applies.</p>
+      </div>
+    </div>
+
+    <!-- ④ Beer-Lambert power decay -->
+    <div class="eq-card">
+      <div class="eq-label">④ Ray power after plume — Beer–Lambert (applied before Fresnel absorption)</div>
+      <div class="eq-body">
+        $$P_{\text{out}} = P_{\text{in}} \cdot \exp\!\bigl(-\alpha \cdot s_{\text{eff}}\bigr)$$
+      </div>
+      <div class="eq-note">
+        <p>Applied at every interface hit. Attenuated power then enters Fresnel absorption.</p>
+        <p>$s_{\text{gas}}$ resets to $0$ after each reflection, so multi-bounce rays inside the
+           keyhole only accumulate their <em>in-keyhole</em> gas path, not the full above-surface path.</p>
+      </div>
+    </div>
+
+  </div><!-- end eqs-col -->
+</div><!-- end layout -->
+
+<div class="footer">
+  Yang et al. 2026 Int. J. Heat Mass Transfer ·
+  Impl: <code>src/laserHeatSource/laserHeatSource.C</code> +
+  <code>laserRayParticle.C</code>
+</div>
+
+</body>
+</html>
