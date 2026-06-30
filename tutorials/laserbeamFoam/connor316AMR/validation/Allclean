@@ -20,3 +20,6 @@ done
 
 echo "Removing generated case folders"
 rm -rf cases
+
+echo "Removing Slurm output files"
+rm -f validation_*.out validation_*.err slurm-*.out
