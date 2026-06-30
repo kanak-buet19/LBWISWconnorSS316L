@@ -51,13 +51,13 @@ def parse_scalar(path: Path, name: str) -> float:
     raise KeyError(f"{name} not found in {path}")
 
 
-def vtk_index(path: Path) -> int:
-    match = re.search(r"_(\d+)\.vtk$", path.name)
-    return int(match.group(1)) if match else -1
+def vtk_time(path: Path) -> float:
+    match = re.search(r"_([-+0-9.eE]+)\.vtk$", path.name)
+    return float(match.group(1)) if match else -1.0
 
 
 def latest_vtk(case_dir: Path) -> Path:
-    files = sorted((case_dir / "VTK").glob("*.vtk"), key=vtk_index)
+    files = sorted((case_dir / "VTK").glob("*.vtk"), key=vtk_time)
     if not files:
         raise FileNotFoundError(f"No legacy internal-mesh .vtk found in {case_dir / 'VTK'}")
     return files[-1]
