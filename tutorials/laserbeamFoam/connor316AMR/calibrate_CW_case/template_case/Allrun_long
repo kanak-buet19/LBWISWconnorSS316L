@@ -9,18 +9,19 @@ set -o pipefail
 
 # User options:
 bParallel=true # Only set to false for debugging purposes.
-convertVTK=true # Convert written times to VTK during the solver run.
-analyzeMeltpool=true # Analyze each newly converted VTU during the solver run.
+convertVTK=true # Convert written times to legacy VTK during the solver run.
+analyzeMeltpool=true # Analyze each newly converted legacy VTK during the solver run.
+deleteAnalyzedVTK="${DELETE_ANALYZED_VTK:-true}" # Remove .vtk after successful analysis to save disk.
 pythonExe="${PYTHON:-/home/kanak/.venv/venv314/bin/python}"
 surfaceY="${SURFACE_Y_UM:-}"
 if [ -z "$surfaceY" ] && [ -f case_build.json ]; then
-    surfaceY=$("$pythonExe" -c 'import json; print(json.load(open("case_build.json")).get("surface_y_um", 144))' 2>/dev/null || true)
+    surfaceY=$("$pythonExe" -c 'import json; print(json.load(open("case_build.json")).get("surface_y_um", 128))' 2>/dev/null || true)
 fi
-surfaceY="${surfaceY:-144}"
+surfaceY="${surfaceY:-128}"
 
-latestInternalVTU()
+latestInternalVTK()
 {
-    find VTK -path "*/internal.vtu" -type f -printf '%T@ %p\n' 2>/dev/null \
+    find VTK -maxdepth 1 -type f -name "*.vtk" -printf '%T@ %p\n' 2>/dev/null \
         | sort -g \
         | tail -1 \
         | cut -d' ' -f2-
@@ -30,30 +31,18 @@ postProcessWrittenTime()
 {
     local timeName="$1"
     local vtkFile=""
-    local converted=false
-    local attempt
 
     echo "[DEBUG] Post-processing output time step ${timeName}..."
-    for attempt in 1 2 3
-    do
-        if ./foamVTK.sh "$timeName"; then
-            converted=true
-            break
-        fi
-        echo "[WARN] foamVTK.sh failed for time step ${timeName} (attempt ${attempt}/3)." >&4
-        sleep $((attempt * 5))
-    done
-
-    if ! ${converted}; then
-        echo "[WARN] Skipping meltpool postprocess for time step ${timeName}; solver will continue." >&4
+    if ! ./foamVTK.sh "$timeName"; then
+        echo "[WARNING] foamVTK.sh failed for time step ${timeName}; solver will continue." >&4
         return 0
     fi
 
     if ${analyzeMeltpool}; then
-        vtkFile="$(latestInternalVTU)"
+        vtkFile="$(latestInternalVTK)"
 
         if [ -z "$vtkFile" ]; then
-            echo "[WARN] No internal.vtu found after converting time step ${timeName}; solver will continue." >&4
+            echo "[WARNING] No legacy internal-mesh .vtk found after converting time step ${timeName}; solver will continue." >&4
             return 0
         fi
 
@@ -62,8 +51,12 @@ postProcessWrittenTime()
             scripts/analyze_meltpool_vtu.py \
             --vtk-file "$vtkFile" \
             --surface-y-um "$surfaceY" \
-            || { echo "[WARN] Meltpool analysis failed for ${vtkFile}; solver will continue." >&4; return 0; }
+            || { echo "[WARNING] Meltpool analysis failed for ${vtkFile}; solver will continue." >&4; return 0; }
         echo "[DEBUG] Meltpool analysis completed successfully for ${vtkFile}."
+        if [ "$deleteAnalyzedVTK" = "true" ]; then
+            rm -f "$vtkFile"
+            echo "[DEBUG] Removed analyzed VTK ${vtkFile}."
+        fi
     fi
 }
 

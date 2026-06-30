@@ -157,6 +157,7 @@ def run_command(case_dir: Path) -> str:
     surface_env = ""
     if surface_y is not None:
         surface_env = f"export SURFACE_Y_UM='{surface_y:.8g}' && "
+    delete_vtk = os.environ.get("DELETE_ANALYZED_VTK", "true")
     if os.environ.get("CALIB_USE_APPTAINER", "0") == "1":
         of_image = os.environ.get("OF2506_IMAGE", str(Path.home() / "openfoam-dev_2506.sif"))
         of_user = os.environ.get("OF2506_USER", os.environ.get("USER", "user"))
@@ -164,12 +165,13 @@ def run_command(case_dir: Path) -> str:
             f"apptainer exec --cleanenv --env USER={of_user} {of_image} "
             f"bash -lc \"source /openfoam/bash.rc && export FOAM_SIGFPE=0 && "
             f"export PYTHON='{python}' && export MPLCONFIGDIR=/tmp && "
+            f"export DELETE_ANALYZED_VTK='{delete_vtk}' && "
             f"{surface_env}"
             f"cd '{case_dir}' && ./Allrun_long > log.run 2>&1\""
         )
     return (
         f"export FOAM_SIGFPE=0 && export PYTHON='{python}' && "
-        f"export MPLCONFIGDIR=/tmp && {surface_env}"
+        f"export MPLCONFIGDIR=/tmp && export DELETE_ANALYZED_VTK='{delete_vtk}' && {surface_env}"
         f"cd '{case_dir}' && ./Allrun_long > log.run 2>&1"
     )
 
@@ -585,11 +587,14 @@ class Calibrator:
 
     def _cand_params(self, cid: int, data: dict | None) -> dict | None:
         """Recover a candidate's params from result.json or case_build.json."""
+        required = set(self.param_names)
         if data and data.get("params"):
-            return data["params"]
+            params = data["params"]
+            return params if required.issubset(params) else None
         for cdir in (RUNS / f"cand_{cid:02d}").glob("*/case_build.json"):
             try:
-                return json.loads(cdir.read_text())["params"]
+                params = json.loads(cdir.read_text())["params"]
+                return params if required.issubset(params) else None
             except (OSError, ValueError, KeyError):
                 continue
         return None
@@ -1468,7 +1473,7 @@ class Calibrator:
                 "parameters": best["params"],
                 "cases": {n: {k: v for k, v in c.items() if k != "series"}
                           for n, c in best["cases"].items()},
-                "note": "Shared elec_resistivity, LeeCoeff, and Marangoni strength calibrated across all CW cases.",
+                "note": "Single Hofmann 200W/900mm/s 316L thermophysical calibration using vtk/final-section melt-pool metrics.",
             }
             (RESULTS / "best_params.json").write_text(json.dumps(bp, indent=2, default=str))
             log(f"BEST candidate #{best['id']} objective {best['objective']:.4f}")
@@ -1485,7 +1490,8 @@ class Calibrator:
         cols = ["id", "status", "objective"] + self.param_names
         for case in self.cases:
             nm = case["name"]
-            cols += [f"{nm}__status", f"{nm}__sim_depth_um", f"{nm}__sim_width_um",
+            cols += [f"{nm}__status", f"{nm}__metric_source",
+                     f"{nm}__sim_depth_um", f"{nm}__sim_width_um",
                      f"{nm}__depth_err", f"{nm}__width_err", f"{nm}__case_error",
                      f"{nm}__converged", f"{nm}__latest_TMax_K",
                      f"{nm}__latest_pVap_kPa", f"{nm}__max_TMax_K",
@@ -1498,7 +1504,8 @@ class Calibrator:
                 row += [r["params"][p] for p in self.param_names]
                 for case in self.cases:
                     c = r["cases"].get(case["name"], {})
-                    row += [c.get("status", ""), c.get("sim_depth_um", ""),
+                    row += [c.get("status", ""), c.get("metric_source", ""),
+                            c.get("sim_depth_um", ""),
                             c.get("sim_width_um", ""), c.get("depth_err", ""),
                             c.get("width_err", ""), c.get("case_error", ""),
                             c.get("converged", ""), c.get("latest_TMax_K", ""),

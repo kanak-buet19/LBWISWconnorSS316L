@@ -2,6 +2,8 @@
 import sys
 import re
 import argparse
+import csv
+import json
 import math
 from pathlib import Path
 from tqdm import tqdm
@@ -66,27 +68,31 @@ def get_sim_parameters(case_dir: Path) -> tuple[float, float, float, float]:
     return p_laser, v_scan, d_laser, t_powder
 
 def get_experimental_metrics(case_dir: Path) -> tuple[float, float]:
-    build_json = case_dir / "case_build.json"
-    if build_json.exists():
+    summary_files = sorted(case_dir.glob("exp_hofmann_*_summary.csv"))
+    for exp_csv in summary_files:
         try:
-            import json
-            with open(build_json, "r") as f:
-                data = json.load(f)
-            case_data = data.get("case", {})
-            w = case_data.get("exp_width_um")
-            d = case_data.get("exp_depth_um")
-            if w is not None and d is not None:
-                return float(w), float(d)
-        except Exception:
+            with open(exp_csv, mode="r", newline="") as f:
+                row = next(csv.DictReader(f), None)
+            if row:
+                return float(row["width_um"]), float(row["depth_um"])
+        except (KeyError, TypeError, ValueError, OSError):
+            pass
+
+    case_info = case_dir / "case_info.json"
+    if case_info.exists():
+        try:
+            with open(case_info, "r") as f:
+                info = json.load(f)
+            return float(info["target_width_um"]), float(info["target_depth_um"])
+        except (KeyError, TypeError, ValueError, OSError, json.JSONDecodeError):
             pass
 
     exp_csv = Path("/home/kanak/drives/d-drive/work/research/connor_project/papers/2026_Hofmann_Meltpool_data_316L/MeltpoolGeometryData.csv")
     if not exp_csv.exists():
         return EXP_WIDTH_DEFAULT, EXP_DEPTH_DEFAULT
-    
+
     try:
         p_laser, v_scan, d_laser, t_powder = get_sim_parameters(case_dir)
-        import csv
         with open(exp_csv, mode='r') as f:
             reader = csv.reader(f)
             header = next(reader)
@@ -143,7 +149,7 @@ def get_latest_absorptivity(case_dir: Path) -> float:
     return 0.0
 
 def get_latest_meltpool_geometry(case_dir: Path) -> tuple[float, float, float]:
-    csv_file = case_dir / "post-processing-data" / "vtu_meltpool_geometry.csv"
+    csv_file = case_dir / "post-processing-data" / "vtk_meltpool_geometry.csv"
     if not csv_file.exists():
         return 0.0, 0.0, 0.0
     try:
@@ -203,8 +209,10 @@ def main():
     laser_z = 0.0
     exec_time = 0.0
     abs_val = 0.0
-    tmax = None
-    pvap_kpa = None
+    t_max = 0.0
+    p_vap_max_kpa = 0.0
+    max_u_metal = 0.0
+    max_u_gas = 0.0
     last_printed_mp_time = -1.0
     first_time_seen = True
     dump_errors = False
@@ -284,29 +292,31 @@ def main():
                 match = re.search(r"ExecutionTime = ([\d\.e\-+]+)", line)
                 if match:
                     exec_time = float(match.group(1))
-            elif "TMax = " in line and "pVapMax = " in line:
-                match = re.search(r"TMax = ([\d\.e\-+]+),\s*pVapMax = ([\d\.e\-+]+)", line)
+            elif "TMax = " in line:
+                match = re.search(r"TMax = ([\d\.e\-+]+).*pVapMax = ([\d\.e\-+]+)", line)
                 if match:
-                    try:
-                        tmax = float(match.group(1))
-                        pvap_kpa = float(match.group(2)) / 1000.0
-                    except ValueError:
-                        pass
-                    
+                    t_max = float(match.group(1))
+                    p_vap_max_kpa = float(match.group(2)) / 1000.0
+            elif "maxU_metal = " in line:
+                match = re.search(r"maxU_metal = ([\d\.e\-+]+).*maxU_gas = ([\d\.e\-+]+)", line)
+                if match:
+                    max_u_metal = float(match.group(1))
+                    max_u_gas = float(match.group(2))
+
             # Build and update progress bar postfix (keep it minimal and clean)
             postfix = {
-                'Time': f"{current_time*1e3:.3f}ms",
                 'dt': f"{current_dt:.2e}",
                 'maxCo': f"{max_co:.2f}",
-                'LaserZ': f"{laser_z:.3f}mm",
-                'CPU': f"{exec_time:.0f}s"
             }
             if abs_val > 0.0:
                 postfix['Abs'] = f"{abs_val*100.0:.1f}%"
-            if tmax is not None:
-                postfix['TMax'] = f"{tmax:.0f}K"
-            if pvap_kpa is not None:
-                postfix['pVap'] = f"{pvap_kpa:.1f}kPa"
+            if t_max > 0.0:
+                postfix['TMax'] = f"{t_max:.0f}K"
+            if p_vap_max_kpa > 0.0:
+                postfix['pVap'] = f"{p_vap_max_kpa:.1f}kPa"
+            if max_u_metal > 0.0 or max_u_gas > 0.0:
+                postfix['Um'] = f"{max_u_metal:.3g}"
+                postfix['Ug'] = f"{max_u_gas:.3g}"
             pbar.set_postfix(postfix)
             
     pbar.close()

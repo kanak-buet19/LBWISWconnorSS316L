@@ -24,37 +24,40 @@ metal
     transportModel  Newtonian;     // Viscosity model for the metal phase
     nu              1.1626e-6;     // Kinematic viscosity [m2/s]
 
-    rho             6881;          // Density [kg/m3]
+    rho             7900;          // Density [kg/m3]
 
     Tsolidus 1658;                 // Solidus temperature [K]
     Tliquidus 1723;                // Liquidus temperature [K]
     LatentHeat 260e3;              // Latent heat of fusion [J/kg]
     beta    1.8e-5;                // Thermal expansion coefficient [1/K]
 
-    table_kappa                    // Metal thermal conductivity table: (T [K], kappa [W/m/K])
+    table_kappa
     (
-        (300    14.68)
-        (500    17.60)
-        (800    21.98)
-        (1200   27.82)
-        (1658   32.51)
-        (1723   30.00)
-        (2500   30.00)
-        (5000   30.00)
+        (300    14.7)
+        (500    17.6)
+        (800    22.0)
+        (1200   28.0)
+        (1500   31.5)
+        (1658   32.5)
+        (1723   30.0)
+        (1724   26.9)
+        (5000   26.9)
+        (10000  26.9)
     );
 
-    table_cp                       // Metal specific heat table: (T [K], cp [J/kg/K])
+    table_cp
     (
         (300    492.8)
-        (500    540.8)
-        (800    612.8)
-        (1200   708.8)
-        (1658   818.7)
-        (1723   790.0)
-        (2500   790.0)
-        (5000   790.0)
+        (500    540.0)
+        (800    590.0)
+        (1200   650.0)
+        (1500   690.0)
+        (1658   720.0)
+        (1723   740.0)
+        (1724   770.0)
+        (5000   770.0)
+        (10000  770.0)
     );
-
     elec_resistivity	1e-6;      // Electrical resistivity [ohm m]
 }
 
@@ -62,11 +65,11 @@ gas
 {
     transportModel  Newtonian;     // Viscosity model for the gas phase
 
-    nu              1.48e-05;      // Kinematic viscosity [m2/s]
+    nu              1.40e-05;      // Gas kinematic viscosity [m2/s]
 
     rho             1;             // Density [kg/m3]
 
-    poly_kappa   (0.04 0 0 0 0 0 0 0);       // Gas thermal conductivity polynomial [W/m/K]
+    poly_kappa   (0.018 0 0 0 0 0 0 0);      // Gas thermal conductivity polynomial [W/m/K]
     poly_cp   (520 0.0 0 0 0 0 0 0);         // Gas specific heat polynomial [J/kg/K]
 
     Tsolidus    1.0;              // Dummy gas solidus temperature [K]
@@ -81,21 +84,29 @@ TRef                        300;        // Radiation reference/background temper
 T_ambient                   300;        // Ambient temperature for convection [K]
 h_convection                0;          // Convective heat transfer coefficient [W/m2/K]
 
-sigma            1.87;            // Surface tension [N/m]
-Marangoni_Constant	-4.9e-4;    // d(sigma)/dT for Marangoni force [N/m/K]
+sigma            1.76;            // Surface tension [N/m] https://www.mdpi.com/1996-1944/17/4/946
+Marangoni_Constant	-4.9e-4;      // Stronger d(sigma)/dT test [N/m/K]
+variableSurfaceTension  off;          // on: sigma(T) = sigma + Marangoni_Constant*(T - Tliquidus)
 p0	101325.0;                    // Atmospheric pressure reference [Pa]
 p_amb   101325.0;                 // Ambient chamber pressure used to choose Tvap [Pa]
-beta_r  0.08;                    // Recoil pressure accommodation coefficient [-]
-Tvap	3122;                    // Vaporization temperature at p_amb [K]
-Tvap_atm    3122;                // Vaporization temperature at p0 [K]
+recoil_coeff 0.54;               // Recoil pressure Clausius-Clapeyron prefactor [-]
+Tvap	3086;                    // Vaporization temperature at p_amb [K] https://www.mdpi.com/1996-1944/17/4/946
+Tvap_atm    3086;                // Vaporization temperature at p0 [K]
 recoilPressureModel condensation; // condensation or modifiedReducedPressure
 recoilTransitionWidth       10; // Smooth recoil activation width above Tvap [K]
 Mm	0.056;                       // Molar mass [kg/mol]
-LatentHeatVap 7.45e6;            // Latent heat of vaporization [J/kg]
+LatentHeatVap 6.336e6;            // Latent heat of vaporization [J/kg]
 
-LeeCoeff        3e5;              // Lee volumetric evaporation coeff [1/s]
+LeeCoeff        0;              // Lee volumetric evaporation coeff [1/s]
 
-V_scan          0.9;            // Scan speed [m/s]
+V_scan          0.9;            // Scan speed (900 mm/s)
 scanDirection   (0 0 1);        // Scanning along +Z direction
+
+// ---- Vapor plume Beer-Lambert attenuation (Yang et al. 2026 IJHMT, Eq. 31-35) ----
+vaporPlumeAttenuation   true;
+muAlphaMax              310;        // [1/m]    Yang et al. 2026
+pVaporMax               1e-7;       // [Pa·m³]  calibrate vs keyhole depth at one reference case
+H_plume                 1e-3;       // [m]      Yang et al. 2026
+uMax                    1.5;        // [m/s]    Yang et al. 2026
 
 // ************************************************************************* //

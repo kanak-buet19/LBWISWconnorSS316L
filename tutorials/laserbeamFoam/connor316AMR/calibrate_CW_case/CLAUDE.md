@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo does
 
-Bayesian-optimization calibration of 316L SS thermophysical parameters for LaserbeamFoam CFD simulations. Targets are CW single-track melt-pool depth/width from Hofmann (2026) experiments. Calibrated params feed subsequent pulsed-laser gravity-variation sims (Riffel et al. 2026).
+Bayesian-optimization calibration of 316L SS thermophysical parameters for LaserbeamFoam CFD simulations. The current target is the single Hofmann 200 W, 900 mm/s, 25 um radius validation case, matching both melt-pool depth and width.
 
 ## Commands
 
@@ -38,10 +38,10 @@ scripts/
   evaluate.py                    ← melt-pool stability scorer (reads per-sim CSV)
   plots.py                       ← post-run visualization
 template_case/                   ← OpenFOAM case template (blockMesh, controlDict, etc.)
-  constant/transportProperties   ← patched per candidate (all 12 calibration params)
+  constant/transportProperties   ← patched per candidate
   system/blockMeshDict           ← patched per case (domain size from geometry config)
   Allrun_long                    ← per-sim runner: blockMesh → setFields → decomposePar → laserbeamFoam
-  scripts/analyze_meltpool_vtu.py  ← per-timestep VTU analysis → CSV
+  scripts/analyze_meltpool_vtu.py  ← per-timestep legacy VTK analysis → CSV + final-section metrics
   scripts/parse_simulation_log.py  ← tees laserbeamFoam stdout
 runs/cand_XX/case_name/          ← generated: one dir per candidate×case
 results/                         ← generated: summary.csv, summary.json, best_params.json, plots/
@@ -50,12 +50,12 @@ results/                         ← generated: summary.csv, summary.json, best_
 ## Calibration loop flow
 
 1. `Calibrator.__init__` → loads config, replays prior results into surrogate (`_load_prior`)
-2. `BOOptimizer.seed_lhs` → enqueues 16 LHS points as initial design
+2. `BOOptimizer.seed_lhs` → enqueues the configured LHS points as initial design
 3. Main loop: `ask()` → `caselib.build_case()` → `Job.start()` (spawns `Allrun_long` subprocess)
-4. `Allrun_long` runs OpenFOAM, calls `analyze_meltpool_vtu.py` after each written timestep → appends to `post-processing-data/vtu_meltpool_geometry.csv`
-5. `evaluate.py` reads that CSV, finds the longest stable tail (variation < `stabilityTol`), computes `case_error = mean(|depth_err|, |width_err|, |ar_err|)` where `ar_err` = aspect-ratio error (depth/width vs exp) — prevents compensating errors (e.g. depth+10%/width−10%) from scoring well
+4. `Allrun_long` runs OpenFOAM, calls `analyze_meltpool_vtu.py` after each written timestep → appends to `post-processing-data/vtk_meltpool_geometry.csv` and writes `final_meltpool_dimensions.csv`
+5. `evaluate.py` prefers the final-section average from `final_meltpool_dimensions.csv`, falls back to stable time-series values, then computes `case_error = mean(|depth_err|, |width_err|, |ar_err|)` where `ar_err` = aspect-ratio error (depth/width vs exp)
 6. Early abort: if pool has stabilized AND error > 50%, sim is killed immediately
-7. Candidate runs all three Hofmann calibration cases; `candidate_objective = mean(case_errors)`.
+7. Candidate runs the configured Hofmann case; `candidate_objective = case_error`.
 8. `BOOptimizer.tell()` → feeds result back; TPE proposes smarter next candidates
 9. On completion: `best_params.json` written, plots generated
 
@@ -67,8 +67,8 @@ Candidates persist via `runs/cand_XX/result.json`. On resubmit, completed candid
 
 | Field | Where | Purpose |
 |---|---|---|
-| `optimizer.nSamples` | config | Candidate/parameter-set budget (default 224); max solver runs are `nSamples × number_of_cases` |
-| `optimizer.initSamples` | config | LHS exploration phase size (default 32) |
+| `optimizer.nSamples` | config | Candidate/parameter-set budget |
+| `optimizer.initSamples` | config | LHS exploration phase size |
 | `execution.coresPerSim` / `totalCores` | config | Parallelism; override with env vars |
 | `earlyAbort.errorThreshold` | config | Kill stabilized-but-bad sims at this error fraction |
 | `earlyAbort.stabilityTol` | config | Pool is "stable" when (max-min)/mean < this over tail |
@@ -79,27 +79,13 @@ Candidates persist via `runs/cand_XX/result.json`. On resubmit, completed candid
 
 All live in `constant/transportProperties` and are patched by `caselib.patch_transportProperties`.
 
-### Table patching (solid/liquid decoupled)
-
-Solid and liquid property controls are independent:
-1. `_scale_solid_table` scales only T ≤ Tsolidus=1658K entries by a narrow factor
-2. `_set_liquid_table` sets T ≥ Tliquidus=1723K entries directly (value + slope)
-
 ### Active optimizer knobs
 
-- `elec_resistivity` — controls laser absorption (ITO model), 8e-7–1.5e-6 Ω·m
-- `LeeCoeff` — volumetric evaporation strength, 3e5–1e6 1/s
-- `dSigmadT_norm` — Marangoni lever; maps to dσ/dT = -7e-4 to -4.9e-4 N/m/K
+The current search varies `nu`, `rho`, `table_kappa_scale`, `table_cp_scale`, `elec_resistivity`, `sigma`, `Marangoni_Constant`, and `LatentHeatVap`.
 
-### Fixed baseline knobs
+### Table patching
 
-These are patched into each case but are not optimized: `cp_solid_scale`, `kappa_solid_scale`, `cp_liquid_value`, `kappa_liquid_value`, `cp_liquid_slope`, `kappa_liquid_slope`, `rho`, `beta_r`, `nu`, `LatentHeat`, `LatentHeatVap`, and `sigma`. `Marangoni_Constant` is derived as `sigma × dSigmadT_norm`.
-
-SS316 table-derived fixed values follow `hofmann_validation/template_case/constant/transportProperties`: `rho=6881 kg/m3`, `nu=1.1626e-6 m2/s`, `LatentHeat=2.6e5 J/kg`, `LatentHeatVap=7.45e6 J/kg`, `sigma=1.87 N/m`, and `Marangoni_Constant=-4.9e-4 N/m/K`.
-
-### Resistivity and Lee coefficient
-
-`elec_resistivity` controls the laser absorption model. `LeeCoeff` controls volumetric evaporation cooling. `dSigmadT_norm` controls Marangoni strength while preserving the sign and SS316L-scale range.
+`table_kappa_scale` and `table_cp_scale` multiply every metal table row. This keeps the search space compact while still allowing thermal diffusivity changes.
 
 `_sub_entry` patches scalar fields by regex. If you add a new parameter, you must add a patcher call in `patch_transportProperties`.
 

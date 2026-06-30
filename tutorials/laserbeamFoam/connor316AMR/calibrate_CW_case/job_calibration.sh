@@ -2,7 +2,7 @@
 #SBATCH --job-name=cwCalib
 #SBATCH --time=72:00:00
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=64
+#SBATCH --ntasks-per-node=36
 #SBATCH --account=mch250110
 #SBATCH --output=calib_%j.out
 #SBATCH --error=calib_%j.err

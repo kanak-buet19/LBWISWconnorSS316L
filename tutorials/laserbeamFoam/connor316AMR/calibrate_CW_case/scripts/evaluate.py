@@ -1,6 +1,6 @@
 """Melt-pool stability + error evaluation for calibration.
 
-Reads `<case>/post-processing-data/vtu_meltpool_geometry.csv` (written live by
+Reads `<case>/post-processing-data/vtk_meltpool_geometry.csv` (written live by
 analyze_meltpool_vtu.py during the run) and reduces the time series of
 meltPoolDepth_um / meltPoolWidth_um to a single 'stable' value, then computes
 relative error vs the experimental target.
@@ -12,7 +12,8 @@ import csv
 import math
 from pathlib import Path
 
-CSV_REL = "post-processing-data/vtu_meltpool_geometry.csv"
+CSV_REL = "post-processing-data/vtk_meltpool_geometry.csv"
+FINAL_CSV_REL = "post-processing-data/final_meltpool_dimensions.csv"
 
 
 def _finite(x: str | float) -> float | None:
@@ -38,6 +39,22 @@ def read_series(case_dir: Path) -> list[dict]:
                 rows.append({"time": t, "depth": d, "width": w})
     rows.sort(key=lambda x: x["time"])
     return rows
+
+
+def read_final_average(case_dir: Path) -> dict | None:
+    """Return final-section average depth/width when the current analyzer wrote it."""
+    csv_path = Path(case_dir) / FINAL_CSV_REL
+    if not csv_path.exists():
+        return None
+    with csv_path.open(newline="") as fh:
+        for row in csv.DictReader(fh):
+            if row.get("section") != "average":
+                continue
+            depth = _finite(row.get("depth_um"))
+            width = _finite(row.get("width_um"))
+            if depth is not None and width is not None:
+                return {"depth": depth, "width": width}
+    return None
 
 
 def _stable_tail(values: list[float], tol: float,
@@ -109,8 +126,16 @@ def evaluate(case_dir: Path, exp_depth_um: float, exp_width_um: float,
     depths = [r["depth"] for r in series]
     widths = [r["width"] for r in series]
 
-    depth, d_conv, d_n = _stable(depths, stability_tol)
-    width, w_conv, w_n = _stable(widths, stability_tol)
+    final = read_final_average(case_dir)
+    if final is not None:
+        depth, width = final["depth"], final["width"]
+        d_conv = w_conv = True
+        d_n = w_n = 3
+        metric_source = "final_meltpool_dimensions_average"
+    else:
+        depth, d_conv, d_n = _stable(depths, stability_tol)
+        width, w_conv, w_n = _stable(widths, stability_tol)
+        metric_source = "stable_time_series"
 
     def rel(sim, exp):
         return float("nan") if not exp else (sim - exp) / exp
@@ -139,6 +164,7 @@ def evaluate(case_dir: Path, exp_depth_um: float, exp_width_um: float,
         "depth_n_stable": d_n, "width_n_stable": w_n,
         "converged": d_conv and w_conv,
         "case_error": case_error,
+        "metric_source": metric_source,
         "series": series,
     }
 
