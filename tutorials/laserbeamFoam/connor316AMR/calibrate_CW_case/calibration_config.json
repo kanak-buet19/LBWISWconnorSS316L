@@ -92,7 +92,7 @@
     "pollIntervalSec": 10,
     "perSimStallSec": 1800,
     "perSimStartupSec": 3600,
-    "minDeltaTAbort": 4e-8,
+    "minDeltaTAbort": 0,
     "minDeltaTConsecutivePolls": 5,
     "lowDeltaTPenalty": 1.0
   }
