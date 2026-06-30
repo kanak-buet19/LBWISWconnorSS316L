@@ -1,5 +1,5 @@
 {
-  "_comment": "Single-case Hofmann 316L calibration using the current validation analyzer. Target case: 200 W, 900 mm/s, 25 um beam radius. Base mesh is 40 um; maxRefinement=2 gives 10 um finest cells.",
+  "_comment": "Single-case Hofmann 316L calibration using the current validation analyzer. Target case: 200 W, 900 mm/s, 25 um beam radius. Base mesh is 20 um; maxRefinement=2 gives 5 um finest cells.",
 
   "objective": {
     "_comment": "Case error = weighted mean absolute relative error over depth, width, and aspect ratio. Aspect ratio is weighted higher to prioritize melt-pool shape.",
@@ -12,7 +12,7 @@
   "mesh_phases": {
     "enabled": false,
     "maxRefinement": 2,
-    "_comment": "Disabled for this validation calibration: every candidate runs at 40 um base with maxRefinement=2 -> 10 um finest cells."
+    "_comment": "Disabled for this validation calibration: every candidate runs at 20 um base with maxRefinement=2 -> 5 um finest cells."
   },
 
   "optimizer": {
@@ -39,7 +39,7 @@
   },
 
   "geometry": {
-    "base_cell": 40e-6,
+    "base_cell": 20e-6,
     "gas_thickness": 80e-6,
     "x_extent": 280e-6,
     "lead_in": 100e-6,
