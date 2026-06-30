@@ -43,7 +43,7 @@ nAngular	240; //360
 
 wavelength	1.070e-6;
 
-e_num_density	4e29;
+e_num_density	5e29;
 //elec_resistivity	1.0e-6;
 
 Radius_Flavour	2.0;

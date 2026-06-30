@@ -48,9 +48,9 @@
     "endTime": 1.1666666666666668e-3,
     "writeInterval": 1e-5,
     "deltaT": 1e-7,
-    "maxDeltaT": 2e-7,
-    "maxCo": 0.35,
-    "maxAlphaCo": 0.35
+    "maxDeltaT": 1e-6,
+    "maxCo": 0.75,
+    "maxAlphaCo": 0.75
   },
 
   "cases": [
