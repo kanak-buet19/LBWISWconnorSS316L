@@ -24,7 +24,7 @@ metal
     transportModel  Newtonian;     // Viscosity model for the metal phase
     nu              1.1626e-6;     // Kinematic viscosity [m2/s]
 
-    rho             6881;          // Density [kg/m3]
+    rho             7900;          // Density [kg/m3]
 
     Tsolidus 1658;                 // Solidus temperature [K]
     Tliquidus 1723;                // Liquidus temperature [K]
