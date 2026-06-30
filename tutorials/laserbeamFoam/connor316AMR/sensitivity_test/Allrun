@@ -1,0 +1,21 @@
+#!/bin/bash
+set -euo pipefail
+
+caseDir="$(cd "$(dirname "$0")" && pwd)"
+cd "$caseDir"
+
+pythonExe="${PYTHON:-python3}"
+
+echo "Preparing sensitivity cases..."
+"$pythonExe" scripts/generate_cases.py --quiet
+
+echo "Running sensitivity sweep..."
+"$pythonExe" scripts/run_sensitivity.py --quiet "$@"
+
+echo "Scanning corrected widths..."
+"$pythonExe" scripts/scan_surface_widths.py --quiet
+
+echo "Building dashboard..."
+"$pythonExe" scripts/build_dashboard.py --quiet
+
+echo "Dashboard: $caseDir/results/dashboard.html"

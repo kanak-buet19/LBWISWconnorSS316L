@@ -1,0 +1,132 @@
+{
+  "description": "Short-track 316L transport-property sensitivity study for melt-pool width. Laser diameter, power, and scan speed are held fixed.",
+  "template_case": "../template",
+  "transport_properties_override": "../validation/materials/SS316L/transportProperties",
+  "case_root": "cases",
+  "results_root": "results",
+  "dashboard": "results/dashboard.html",
+  "python": "python3",
+  "run_settings": {
+    "base_cell_um": 40.0,
+    "domain_m": [0.00128, 0.00128, 0.00128],
+    "cells": [32, 32, 32],
+    "surface_y_m": 0.0003,
+    "scan_track_m": 0.00025,
+    "scan_speed_m_per_s": 0.9,
+    "scan_center_m": [0.00064, 0.0, 0.00064],
+    "end_time_s": 0.0002777778,
+    "write_interval_s": 0.0002777778,
+    "max_refinement": 1,
+    "refine_interval": 10,
+    "number_of_subdomains": 4,
+    "disable_convective_and_radiative_cooling": true,
+    "convert_vtk_during_run": true,
+    "analyze_meltpool_during_run": true
+  },
+  "sweep": {
+    "relative_delta": 0.2,
+    "parameters": [
+      {
+        "name": "surface_tension_sigma",
+        "label": "Surface tension sigma",
+        "unit": "N/m",
+        "operation": "scale_scalar",
+        "file": "constant/transportProperties",
+        "path": "sigma"
+      },
+      {
+        "name": "marangoni_constant",
+        "label": "Marangoni dSigma/dT",
+        "unit": "N/m/K",
+        "operation": "scale_scalar",
+        "file": "constant/transportProperties",
+        "path": "Marangoni_Constant"
+      },
+      {
+        "name": "kinematic_viscosity_nu",
+        "label": "Liquid metal kinematic viscosity",
+        "unit": "m2/s",
+        "operation": "scale_scalar",
+        "file": "constant/transportProperties",
+        "path": "metal.nu"
+      },
+      {
+        "name": "thermal_expansion_beta",
+        "label": "Thermal expansion beta",
+        "unit": "1/K",
+        "operation": "scale_scalar",
+        "file": "constant/transportProperties",
+        "path": "metal.beta"
+      },
+      {
+        "name": "solid_kappa",
+        "label": "Solid thermal conductivity",
+        "unit": "W/m/K",
+        "operation": "scale_table_by_temperature",
+        "file": "constant/transportProperties",
+        "path": "metal.table_kappa",
+        "temperature_max_K": 1658
+      },
+      {
+        "name": "liquid_kappa",
+        "label": "Liquid thermal conductivity",
+        "unit": "W/m/K",
+        "operation": "scale_table_by_temperature",
+        "file": "constant/transportProperties",
+        "path": "metal.table_kappa",
+        "temperature_min_K": 1723
+      },
+      {
+        "name": "solid_cp",
+        "label": "Solid specific heat",
+        "unit": "J/kg/K",
+        "operation": "scale_table_by_temperature",
+        "file": "constant/transportProperties",
+        "path": "metal.table_cp",
+        "temperature_max_K": 1658
+      },
+      {
+        "name": "liquid_cp",
+        "label": "Liquid specific heat",
+        "unit": "J/kg/K",
+        "operation": "scale_table_by_temperature",
+        "file": "constant/transportProperties",
+        "path": "metal.table_cp",
+        "temperature_min_K": 1723
+      },
+      {
+        "name": "latent_heat_fusion",
+        "label": "Latent heat of melting",
+        "unit": "J/kg",
+        "operation": "scale_scalar",
+        "file": "constant/transportProperties",
+        "path": "metal.LatentHeat"
+      },
+      {
+        "name": "latent_heat_vaporization",
+        "label": "Latent heat of vaporization",
+        "unit": "J/kg",
+        "operation": "scale_scalar",
+        "file": "constant/transportProperties",
+        "path": "LatentHeatVap"
+      },
+      {
+        "name": "vaporization_temperature",
+        "label": "Vaporization temperature",
+        "unit": "K",
+        "operation": "scale_scalar",
+        "file": "constant/transportProperties",
+        "path": "Tvap"
+      },
+      {
+        "name": "recoil_pressure_coefficient",
+        "label": "Recoil pressure coefficient",
+        "unit": "-",
+        "operation": "scale_scalar",
+        "file": "constant/transportProperties",
+        "path": "recoil_coeff",
+        "optional": true
+      }
+    ]
+  }
+}

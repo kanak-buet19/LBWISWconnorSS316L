@@ -17,23 +17,24 @@
 
   "optimizer": {
     "method": "bo_tpe",
-    "nSamples": 96,
-    "initSamples": 24,
+    "nSamples": 16,
+    "initSamples": 8,
     "seed": 42,
-    "_comment": "Bayesian optimization (Optuna TPE) with an initial Latin-Hypercube design."
+    "_comment": "Bayesian optimization (Optuna TPE): 8 Latin-Hypercube exploration sims, then 8 optimization sims."
   },
 
   "parameters": {
-    "_comment": "Active 316L thermal/surface knobs. Solid factors apply at/below Tsolidus; liquid factors apply at/above Tliquidus; the mushy zone is blended linearly.",
+    "_comment": "Only three active width-control knobs from the sensitivity test: solid kappa scale, solid cp scale, and latent heat of melting. Everything else is frozen at baseline. Solid factors apply at/below Tsolidus; liquid factors apply at/above Tliquidus; the mushy zone is blended linearly.",
     "nu":                  {"type": "scalar", "baseline": 1.1626e-6, "min": 1.1626e-6, "max": 1.1626e-6, "fixed": true, "_units": "m2/s"},
     "rho":                 {"type": "scalar", "baseline": 6881.0,   "min": 6881.0,    "max": 6881.0,    "fixed": true, "_units": "kg/m3"},
-    "table_kappa_solid_scale": {"type": "scale", "baseline": 1.0,   "min": 0.90,       "max": 1.10,       "_units": "-"},
-    "table_kappa_liquid_scale": {"type": "scale", "baseline": 1.0,  "min": 0.90,       "max": 1.10,       "_units": "-"},
-    "table_cp_solid_scale":    {"type": "scale", "baseline": 1.0,   "min": 0.90,       "max": 1.10,       "_units": "-"},
-    "table_cp_liquid_scale":   {"type": "scale", "baseline": 1.0,   "min": 0.90,       "max": 1.10,       "_units": "-"},
-    "elec_resistivity":    {"type": "scalar", "baseline": 0.95e-6,  "min": 0.855e-6,   "max": 1.045e-6,   "_units": "ohm m"},
-    "sigma":               {"type": "scalar", "baseline": 1.87,     "min": 1.683,      "max": 2.057,      "_units": "N/m"},
-    "Marangoni_Constant":  {"type": "scalar", "baseline": -4.9e-4,  "min": -5.39e-4,   "max": -4.41e-4,   "_units": "N/m/K"},
+    "table_kappa_solid_scale": {"type": "scale", "baseline": 1.0,   "min": 0.80,       "max": 1.20,       "_units": "-"},
+    "table_kappa_liquid_scale": {"type": "scale", "baseline": 1.0,  "min": 1.0,        "max": 1.0,        "fixed": true, "_units": "-"},
+    "table_cp_solid_scale":    {"type": "scale", "baseline": 1.0,   "min": 0.80,       "max": 1.20,       "_units": "-"},
+    "table_cp_liquid_scale":   {"type": "scale", "baseline": 1.0,   "min": 1.0,        "max": 1.0,        "fixed": true, "_units": "-"},
+    "LatentHeat":          {"type": "scalar", "baseline": 260e3,    "min": 208e3,      "max": 312e3,      "_units": "J/kg"},
+    "elec_resistivity":    {"type": "scalar", "baseline": 0.95e-6,  "min": 0.95e-6,    "max": 0.95e-6,    "fixed": true, "_units": "ohm m"},
+    "sigma":               {"type": "scalar", "baseline": 1.87,     "min": 1.87,       "max": 1.87,       "fixed": true, "_units": "N/m"},
+    "Marangoni_Constant":  {"type": "scalar", "baseline": -4.9e-4,  "min": -4.9e-4,    "max": -4.9e-4,    "fixed": true, "_units": "N/m/K"},
     "LatentHeatVap":       {"type": "scalar", "baseline": 6.336e6,  "min": 6.336e6,    "max": 6.336e6,    "fixed": true, "_units": "J/kg"}
   },
 

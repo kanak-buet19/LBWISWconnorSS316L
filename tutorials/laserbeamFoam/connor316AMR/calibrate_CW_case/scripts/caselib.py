@@ -264,6 +264,7 @@ def patch_transportProperties(path: Path, params: dict,
     t = _sub_entry(t, "LatentHeatVap", g(params["LatentHeatVap"]))
     t = _sub_entry_in_block(t, "metal", "rho", g(params["rho"]))
     t = _sub_entry_in_block(t, "metal", "nu", g(params["nu"]))
+    t = _sub_entry_in_block(t, "metal", "LatentHeat", g(params["LatentHeat"]))
 
     # -- cp / kappa tables --------------------------------------------------
     t_solidus = _metal_phase_temperature(t, "Tsolidus")
