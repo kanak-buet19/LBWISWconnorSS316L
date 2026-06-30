@@ -337,6 +337,30 @@
       "target_depth_um": 331,
       "electric_resistivity_values": [2e-6],
       "exp_timeseries_csv": "validation_data/allen_paper/extracted/csv/S10_0p58MWcm2_stats.csv"
+    },
+    {
+      "name": "nist_amb2025_ST_BP",
+      "material": "IN718",
+      "enabled": true,
+      "exp_tag": "nist_amb2025",
+      "depth_metric": "keyhole",
+      "base_mesh_size_um": 20,
+      "amr_levels": 2,
+      "power_W": 280,
+      "scan_speed_mm_s": 960,
+      "laser_radius_m": 36e-6,
+      "laser_start_z_m": 0.000120,
+      "laser_end_z_m": 0.001620,
+      "domain_x_m": 0.000400,
+      "domain_z_m": 0.001620,
+      "domain_depth_m": 0.000400,
+      "surface_y_m": 0.000150,
+      "laser_off_time_s": 1.5625e-3,
+      "end_time_s": 1.5625e-3,
+      "target_width_um": 135,
+      "target_depth_um": 125,
+      "write_interval_s": 5e-6,
+      "shielding_gas": "as_material"
     }
   ]
 }

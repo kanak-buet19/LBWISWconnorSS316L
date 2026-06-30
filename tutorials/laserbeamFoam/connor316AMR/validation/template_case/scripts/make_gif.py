@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create animated GIF from vtu_sections PNGs.
+"""Create animated GIF from vtk_sections PNGs.
 
 Usage:
     python scripts/make_gif.py                  # auto-detect case from script location
@@ -23,7 +23,7 @@ def main() -> None:
     args = parser.parse_args()
 
     case = args.case.resolve()
-    png_dir = case / "post-processing-data" / "vtu_sections"
+    png_dir = case / "post-processing-data" / "vtk_sections"
     out_gif = args.out or case / "post-processing-data" / "meltpool_sections.gif"
 
     frames = sorted(png_dir.glob("*.png"))

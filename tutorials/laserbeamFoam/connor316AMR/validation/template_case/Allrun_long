@@ -9,13 +9,13 @@ set -o pipefail
 
 # User options:
 bParallel=true # Only set to false for debugging purposes.
-convertVTK=true # Convert written times to VTK during the solver run.
-analyzeMeltpool=true # Analyze each newly converted VTU during the solver run.
+convertVTK=true # Convert written times to legacy VTK during the solver run.
+analyzeMeltpool=true # Analyze each newly converted legacy VTK during the solver run.
 pythonExe="${PYTHON:-/home/kanak/.venv/venv314/bin/python}"
 
-latestInternalVTU()
+latestInternalVTK()
 {
-    find VTK -path "*/internal.vtu" -type f -printf '%T@ %p\n' 2>/dev/null \
+    find VTK -maxdepth 1 -type f -name "*.vtk" -printf '%T@ %p\n' 2>/dev/null \
         | sort -g \
         | tail -1 \
         | cut -d' ' -f2-
@@ -28,18 +28,16 @@ postProcessWrittenTime()
 
     echo "[DEBUG] Post-processing output time step ${timeName}..."
     if ! ./foamVTK.sh "$timeName"; then
-        echo "[ERROR] foamVTK.sh failed for time step ${timeName}! Terminating simulation." >&4
-        kill 0
-        exit 1
+        echo "[WARNING] foamVTK.sh failed for time step ${timeName}; solver will continue." >&4
+        return 0
     fi
 
     if ${analyzeMeltpool}; then
-        vtkFile="$(latestInternalVTU)"
+        vtkFile="$(latestInternalVTK)"
 
         if [ -z "$vtkFile" ]; then
-            echo "[ERROR] No internal.vtu found after converting time step ${timeName}! Terminating simulation." >&4
-            kill 0
-            exit 1
+            echo "[WARNING] No legacy internal-mesh .vtk found after converting time step ${timeName}; solver will continue." >&4
+            return 0
         fi
 
         echo "[DEBUG] Running meltpool analysis on ${vtkFile}..."
@@ -47,7 +45,7 @@ postProcessWrittenTime()
             scripts/analyze_meltpool_vtu.py \
             --vtk-file "$vtkFile" \
             --surface-y-um 128 \
-            || { echo "[ERROR] Meltpool analysis failed for ${vtkFile}! Terminating simulation." >&4; kill 0; exit 1; }
+            || { echo "[WARNING] Meltpool analysis failed for ${vtkFile}; solver will continue." >&4; return 0; }
         echo "[DEBUG] Meltpool analysis completed successfully for ${vtkFile}."
     fi
 }

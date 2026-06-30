@@ -33,6 +33,13 @@ def replace_regex(path: Path, pattern: str, repl: str) -> None:
     write_text(path, new_text)
 
 
+def replace_regex_optional(path: Path, pattern: str, repl: str) -> None:
+    text = read_text(path)
+    new_text, count = re.subn(pattern, repl, text, flags=re.MULTILINE)
+    if count:
+        write_text(path, new_text)
+
+
 def fmt_m(value: float) -> str:
     return f"{value:.6e}"
 
@@ -422,7 +429,7 @@ def configure_case(case_dir: Path, case: dict) -> None:
         r"^laserRadius\s+[-+0-9.eE]+;.*$",
         f"laserRadius {radius:.6g};  // {spot * 1000.0:.0f} um spot diameter",
     )
-    replace_regex(
+    replace_regex_optional(
         case_dir / "constant" / "transportProperties",
         r"^V_scan\s+[-+0-9.eE]+;\s*//.*$",
         f"V_scan          {speed / 1000.0:g};            // Scan speed ({speed} mm/s)",
@@ -448,10 +455,13 @@ def configure_case(case_dir: Path, case: dict) -> None:
         f"writeInterval   {write_interval:.2e};",
     )
     template_dir = ROOT / case.get("template", "template_case")
-    shutil.copy2(
-        template_dir / "scripts" / "parse_simulation_log.py",
-        case_dir / "scripts" / "parse_simulation_log.py",
-    )
+    for root_script_name in ("Allrun_long", "foamVTK.sh"):
+        shutil.copy2(template_dir / root_script_name, case_dir / root_script_name)
+    for script_name in ("parse_simulation_log.py", "analyze_meltpool_vtu.py"):
+        shutil.copy2(
+            template_dir / "scripts" / script_name,
+            case_dir / "scripts" / script_name,
+        )
     replace_regex(
         case_dir / "scripts" / "parse_simulation_log.py",
         r"^    v_scan = [-+0-9.]+$",
@@ -469,22 +479,29 @@ def configure_case(case_dir: Path, case: dict) -> None:
     )
     depth_metric = case.get("depth_metric", "meltpool")
     compare_depth_field = "keyholeDepth_um" if depth_metric == "keyhole" else "meltPoolDepth_um"
+    surface_y_m = float(case.get("surface_y_m", _GAS_M))
+    surface_y_um = surface_y_m * 1e6
     replace_regex(
         case_dir / "scripts" / "analyze_meltpool_vtu.py",
         r'^COMPARE_DEPTH_FIELD = ".*"$',
         f'COMPARE_DEPTH_FIELD = "{compare_depth_field}"',
+    )
+    replace_regex(
+        case_dir / "Allrun_long",
+        r"--surface-y-um\s+[-+0-9.eE]+",
+        f"--surface-y-um {surface_y_um:g}",
     )
 
     x_max, y_max, z_max = mesh_bounds(case_dir / "system" / "blockMeshDict")
     replace_regex(
         case_dir / "system" / "setFieldsDict",
         r"^\s*// metal:.*$",
-        f"        // metal:     y=0.128mm to {y_max * 1e3:.3f}mm, full z length",
+        f"        // metal:     y={surface_y_m * 1e3:.3f}mm to {y_max * 1e3:.3f}mm, full z length",
     )
     replace_regex(
         case_dir / "system" / "setFieldsDict",
-        r"^\s*box \(0 0\.128e-3 0\) \([^)]+\);$",
-        f"        box (0 0.128e-3 0) ({fmt_m(x_max)} {fmt_m(y_max)} {fmt_m(z_max)});",
+        r"^\s*box \(0 [-+0-9.eE]+ 0\) \([^)]+\);$",
+        f"        box (0 {fmt_m(surface_y_m)} 0) ({fmt_m(x_max)} {fmt_m(y_max)} {fmt_m(z_max)});",
     )
 
     laser_x = x_max / 2.0
@@ -613,7 +630,8 @@ def main() -> None:
                 raise RuntimeError(f"material transportProperties not found: {mat_file}")
             shutil.copy2(mat_file, case_dir / "constant" / "transportProperties")
         gas = case.get("shielding_gas", cfg.get("shielding_gas", "argon"))
-        set_shielding_gas(case_dir, gas)
+        if gas not in {"as_material", "keep", "material"}:
+            set_shielding_gas(case_dir, gas)
         if "_electric_resistivity_value" in case:
             set_electric_resistivity(case_dir, case["_electric_resistivity_value"])
         configure_case(case_dir, case)

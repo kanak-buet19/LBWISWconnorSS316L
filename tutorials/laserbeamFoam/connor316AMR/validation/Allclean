@@ -10,7 +10,11 @@ for caseDir in cases/*; do
     echo "===== Cleaning $(basename "$caseDir") ====="
     (
         cd "$caseDir"
-        ./Allclean_long
+        if [ -x ./Allclean_long ]; then
+            ./Allclean_long
+        else
+            echo "Skipping case-local clean; Allclean_long is missing"
+        fi
     )
 done
 

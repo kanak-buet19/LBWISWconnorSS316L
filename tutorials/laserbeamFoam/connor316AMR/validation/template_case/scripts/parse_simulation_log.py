@@ -149,7 +149,7 @@ def get_latest_absorptivity(case_dir: Path) -> float:
     return 0.0
 
 def get_latest_meltpool_geometry(case_dir: Path) -> tuple[float, float, float]:
-    csv_file = case_dir / "post-processing-data" / "vtu_meltpool_geometry.csv"
+    csv_file = case_dir / "post-processing-data" / "vtk_meltpool_geometry.csv"
     if not csv_file.exists():
         return 0.0, 0.0, 0.0
     try:

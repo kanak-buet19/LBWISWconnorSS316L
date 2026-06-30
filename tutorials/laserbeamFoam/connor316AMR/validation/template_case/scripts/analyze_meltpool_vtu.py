@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Measure melt-pool/keyhole metrics from reconstructed AMR VTU files.
+"""Measure melt-pool/keyhole metrics from reconstructed legacy VTK files.
 
 Outputs:
-  post-processing-data/vtu_meltpool_geometry.csv
-  post-processing-data/vtu_sections/*.png
+  post-processing-data/vtk_meltpool_geometry.csv
+  post-processing-data/vtk_sections/*.png
 """
 
 from __future__ import annotations
@@ -69,12 +69,16 @@ def vtk_time(path: Path) -> float:
     if match:
         return float(match.group(1))
 
-    match = re.search(r"_([0-9.eE+-]+)\.(?:vtk|vtu)$", path.name)
+    match = re.search(r"_([0-9.eE+-]+)\.vtk$", path.name)
     if not match:
         match = re.search(r"_([0-9.eE+-]+)$", path.parent.name)
     if not match:
         raise ValueError(f"Cannot parse time from {path}")
     return float(match.group(1))
+
+
+def internal_mesh_vtk_files(vtk_dir: Path) -> list[Path]:
+    return sorted(vtk_dir.glob("*.vtk"), key=vtk_time)
 
 
 def field(mesh: pv.DataSet, name: str) -> np.ndarray:
@@ -1069,7 +1073,7 @@ def write_rows(csv_path: Path, rows_by_time: dict[float, dict[str, object]]) -> 
 
 
 def section_index(vtk_file: Path, vtk_dir: Path) -> int:
-    vtk_files = sorted(vtk_dir.glob("*/internal.vtu"), key=vtk_time)
+    vtk_files = internal_mesh_vtk_files(vtk_dir)
     vtk_file = vtk_file.resolve()
     for index, candidate in enumerate(vtk_files):
         if candidate.resolve() == vtk_file:
@@ -1078,8 +1082,7 @@ def section_index(vtk_file: Path, vtk_dir: Path) -> int:
 
 
 def numbered_section_png(png_dir: Path, index: int, vtk_file: Path) -> Path:
-    name = vtk_file.parent.name if vtk_file.name == "internal.vtu" else vtk_file.stem
-    return png_dir / f"{index:04d}_{name}.png"
+    return png_dir / f"{index:04d}_{vtk_file.stem}.png"
 
 
 def read_laser_z_table(case: Path) -> tuple[np.ndarray, np.ndarray] | None:
@@ -1412,8 +1415,7 @@ def final_meltpool_slice(
     if slc.n_points < 3:
         return {"z_um": z_um, "valid": False, "reason": "slice has fewer than 3 points"}
 
-    has_tmax = "TmaxHistory" in slc.point_data
-    required = ("alpha.metal", "TmaxHistory") if has_tmax else ("alpha.metal", "meltTrackID")
+    required = ("alpha.metal", "TmaxHistory")
     missing = [name for name in required if name not in slc.point_data]
     if missing:
         available = sorted(set(slc.point_data.keys()) | set(slc.cell_data.keys()))
@@ -1436,25 +1438,14 @@ def final_meltpool_slice(
     Ag_near = griddata(points, alpha, (Xg, Yg), method="nearest")
     Ag[np.isnan(Ag)] = Ag_near[np.isnan(Ag)]
 
-    if has_tmax:
-        history_values = np.asarray(slc.point_data["TmaxHistory"])
-        Hg = griddata(points, history_values, (Xg, Yg), method="linear")
-        Hg_near = griddata(points, history_values, (Xg, Yg), method="nearest")
-        Hg[np.isnan(Hg)] = Hg_near[np.isnan(Hg)]
-        contour_values = np.ma.masked_where(Ag < 0.5, Hg)
-        contour_level = t_threshold
-        field_label = f"TmaxHistory = {t_threshold:.0f} K"
-        plot_values = Hg
-    else:
-        melt_track = np.asarray(slc.point_data["meltTrackID"])
-        melted_metal = ((melt_track >= 0.5) & (alpha >= 0.5)).astype(float)
-        Hg = griddata(points, melted_metal, (Xg, Yg), method="linear")
-        Hg_near = griddata(points, melted_metal, (Xg, Yg), method="nearest")
-        Hg[np.isnan(Hg)] = Hg_near[np.isnan(Hg)]
-        contour_values = Hg
-        contour_level = 0.5
-        field_label = "meltTrackID >= 0.5"
-        plot_values = Hg
+    history_values = np.asarray(slc.point_data["TmaxHistory"])
+    Hg = griddata(points, history_values, (Xg, Yg), method="linear")
+    Hg_near = griddata(points, history_values, (Xg, Yg), method="nearest")
+    Hg[np.isnan(Hg)] = Hg_near[np.isnan(Hg)]
+    contour_values = np.ma.masked_where(Ag < 0.5, Hg)
+    contour_level = t_threshold
+    field_label = f"TmaxHistory = {t_threshold:.0f} K"
+    plot_values = Hg
 
     fig_tmp, ax_tmp = plt.subplots()
     contour = ax_tmp.contour(Xg, Yg, contour_values, levels=[contour_level])
@@ -1614,11 +1605,7 @@ def plot_final_meltpool_sections(
         plot_values = result["plot_values"]
         contour_values = result["contour_values"]
         contour_level = float(result["contour_level"])
-        is_temperature_history = str(result.get("field_label", "")).startswith("TmaxHistory")
-        if is_temperature_history:
-            ax.pcolormesh(Xg, Yg, plot_values, shading="auto", cmap="inferno", rasterized=True)
-        else:
-            ax.pcolormesh(Xg, Yg, plot_values, shading="auto", cmap="Greys", vmin=0, vmax=1)
+        ax.pcolormesh(Xg, Yg, plot_values, shading="auto", cmap="inferno", rasterized=True)
         ax.contour(Xg, Yg, contour_values, levels=[contour_level], colors="black", linewidths=2)
         ax.axhline(surface_y_um, linestyle="--", linewidth=1.5, color="#D62728", zorder=10)
         ax.axis("equal")
@@ -1799,8 +1786,7 @@ def plot_final_melttrack_yz(
         ax.text(0.5, 0.5, "YZ slice has fewer than 3 points", transform=ax.transAxes, ha="center", va="center")
         ax.set_axis_off()
     else:
-        has_tmax = "TmaxHistory" in slc.point_data
-        required = ("alpha.metal", "TmaxHistory") if has_tmax else ("alpha.metal", "meltTrackID")
+        required = ("alpha.metal", "TmaxHistory")
         missing = [name for name in required if name not in slc.point_data]
         if missing:
             ax.text(
@@ -1826,23 +1812,13 @@ def plot_final_melttrack_yz(
             Ag_near = griddata(points, alpha, (Zg, Yg), method="nearest")
             Ag[np.isnan(Ag)] = Ag_near[np.isnan(Ag)]
 
-            if has_tmax:
-                history_values = np.asarray(slc.point_data["TmaxHistory"])
-                Hg = griddata(points, history_values, (Zg, Yg), method="linear")
-                Hg_near = griddata(points, history_values, (Zg, Yg), method="nearest")
-                Hg[np.isnan(Hg)] = Hg_near[np.isnan(Hg)]
-                contour_values = np.ma.masked_where(Ag < 0.5, Hg)
-                contour_level = t_threshold
-                ax.pcolormesh(Zg, Yg, Hg, shading="auto", cmap="inferno", rasterized=True)
-            else:
-                melt_track = np.asarray(slc.point_data["meltTrackID"])
-                melted_metal = ((melt_track >= 0.5) & (alpha >= 0.5)).astype(float)
-                Hg = griddata(points, melted_metal, (Zg, Yg), method="linear")
-                Hg_near = griddata(points, melted_metal, (Zg, Yg), method="nearest")
-                Hg[np.isnan(Hg)] = Hg_near[np.isnan(Hg)]
-                contour_values = Hg
-                contour_level = 0.5
-                ax.pcolormesh(Zg, Yg, Hg, shading="auto", cmap="Greys", vmin=0, vmax=1)
+            history_values = np.asarray(slc.point_data["TmaxHistory"])
+            Hg = griddata(points, history_values, (Zg, Yg), method="linear")
+            Hg_near = griddata(points, history_values, (Zg, Yg), method="nearest")
+            Hg[np.isnan(Hg)] = Hg_near[np.isnan(Hg)]
+            contour_values = np.ma.masked_where(Ag < 0.5, Hg)
+            contour_level = t_threshold
+            ax.pcolormesh(Zg, Yg, Hg, shading="auto", cmap="inferno", rasterized=True)
 
             ax.contour(Zg, Yg, contour_values, levels=[contour_level], colors="black", linewidths=2)
             ax.contour(
@@ -1966,7 +1942,7 @@ def main() -> None:
     case = args.case.resolve()
     vtk_dir = args.vtk_dir or case / "VTK"
     out_dir = case / "post-processing-data"
-    png_dir = out_dir / "vtu_sections"
+    png_dir = out_dir / "vtk_sections"
     out_dir.mkdir(exist_ok=True)
     png_dir.mkdir(exist_ok=True)
 
@@ -1977,7 +1953,7 @@ def main() -> None:
     if args.vtk_file:
         vtk_files = [args.vtk_file.resolve()]
     else:
-        vtk_files = sorted(vtk_dir.glob("*/internal.vtu"), key=vtk_time)
+        vtk_files = internal_mesh_vtk_files(vtk_dir)
 
     exp_metrics = read_experimental_meltpool(args.exp_summary_csv.resolve())
     exp_mask_image = args.exp_mask_image.resolve()
@@ -2035,7 +2011,7 @@ def main() -> None:
         else:
             print(f"exp-timeseries-csv not found: {exp_ts_path}")
 
-    csv_path = out_dir / "vtu_meltpool_geometry.csv"
+    csv_path = out_dir / "vtk_meltpool_geometry.csv"
     rows_by_time = read_existing_rows(csv_path)
 
     for vtk_file in vtk_files:

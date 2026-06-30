@@ -4,6 +4,15 @@ set -e
 
 . "$WM_PROJECT_DIR/bin/tools/RunFunctions"
 
+foam_to_vtk()
+{
+    foamToVTK -legacy "$@"
+    if find VTK -type f \( -name "*.vtu" -o -name "*.vtp" -o -name "*.vtm" \) | grep -q .; then
+        echo "[ERROR] foamToVTK produced XML VTK files; expected legacy .vtk only." >&2
+        return 1
+    fi
+}
+
 is_numeric_time()
 {
     [[ "$1" =~ ^([0-9]+|[0-9]*\.[0-9]+)([eE][-+]?[0-9]+)?$ ]]
@@ -51,7 +60,7 @@ if [ "$#" -gt 0 ] && [ "$1" = "all" ]; then
     reconstructPar -time "0:" >> log.reconstructPar 2>&1 || { echo "[ERROR] reconstructPar failed! Exiting."; exit 1; }
 
     echo "[DEBUG] Running foamToVTK..."
-    foamToVTK -useTimeName >> log.foamToVTK 2>&1 || { echo "[ERROR] foamToVTK failed! Exiting."; exit 1; }
+    foam_to_vtk -useTimeName >> log.foamToVTK 2>&1 || { echo "[ERROR] foamToVTK failed! Exiting."; exit 1; }
 
     remove_reconstructed_times
 
@@ -90,6 +99,6 @@ echo "[DEBUG] Running reconstructPar for time step ${timeName}..."
 reconstructPar -time "$timeName" >> log.reconstructPar 2>&1 || { echo "[ERROR] reconstructPar failed for time ${timeName}! Exiting."; exit 1; }
 
 echo "[DEBUG] Running foamToVTK for time step ${timeName}..."
-foamToVTK -time "$timeName" -useTimeName >> log.foamToVTK 2>&1 || { echo "[ERROR] foamToVTK failed for time ${timeName}! Exiting."; exit 1; }
+foam_to_vtk -time "$timeName" -useTimeName >> log.foamToVTK 2>&1 || { echo "[ERROR] foamToVTK failed for time ${timeName}! Exiting."; exit 1; }
 
 remove_reconstructed_time "$timeName"

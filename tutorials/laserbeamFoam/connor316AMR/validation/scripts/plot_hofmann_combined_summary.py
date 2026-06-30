@@ -52,14 +52,14 @@ def parse_scalar(path: Path, name: str) -> float:
 
 
 def vtk_index(path: Path) -> int:
-    match = re.search(r"_(\d+)$", path.parent.name)
+    match = re.search(r"_(\d+)\.vtk$", path.name)
     return int(match.group(1)) if match else -1
 
 
 def latest_vtk(case_dir: Path) -> Path:
-    files = sorted((case_dir / "VTK").glob("*/internal.vtu"), key=vtk_index)
+    files = sorted((case_dir / "VTK").glob("*.vtk"), key=vtk_index)
     if not files:
-        raise FileNotFoundError(f"No VTK/*/internal.vtu found in {case_dir}")
+        raise FileNotFoundError(f"No legacy internal-mesh .vtk found in {case_dir / 'VTK'}")
     return files[-1]
 
 
@@ -119,27 +119,18 @@ def slice_section(case: dict[str, object]) -> dict[str, object]:
     Ag_near = griddata(points, alpha, (Xg, Yg), method="nearest")
     Ag[np.isnan(Ag)] = Ag_near[np.isnan(Ag)]
 
-    if "TmaxHistory" in slc.point_data:
-        field = np.asarray(slc.point_data["TmaxHistory"])
-        field_label = f"TmaxHistory >= {float(case['t_solidus']):.0f} K"
-        level = float(case["t_solidus"])
-    elif "meltTrackID" in slc.point_data:
-        field = ((np.asarray(slc.point_data["meltTrackID"]) >= 0.5) & (alpha >= 0.5)).astype(float)
-        field_label = "meltTrackID >= 0.5"
-        level = 0.5
-    else:
-        raise RuntimeError(f"{case['name']}: missing TmaxHistory and meltTrackID")
+    if "TmaxHistory" not in slc.point_data:
+        raise RuntimeError(f"{case['name']}: missing TmaxHistory")
+    field = np.asarray(slc.point_data["TmaxHistory"])
+    field_label = f"TmaxHistory >= {float(case['t_solidus']):.0f} K"
+    level = float(case["t_solidus"])
 
     Fg = griddata(points, field, (Xg, Yg), method="linear")
     Fg_near = griddata(points, field, (Xg, Yg), method="nearest")
     Fg[np.isnan(Fg)] = Fg_near[np.isnan(Fg)]
 
-    if "TmaxHistory" in slc.point_data:
-        contour_values = np.ma.masked_where(Ag < 0.5, Fg)
-        plot_values = Fg
-    else:
-        contour_values = Fg
-        plot_values = Fg
+    contour_values = np.ma.masked_where(Ag < 0.5, Fg)
+    plot_values = Fg
 
     return {
         "Xg": Xg,
