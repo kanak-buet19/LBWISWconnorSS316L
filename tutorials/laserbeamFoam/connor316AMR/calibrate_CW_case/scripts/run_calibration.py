@@ -343,9 +343,14 @@ class Job:
             except ProcessLookupError:
                 pass
 
-    def evaluate(self, stability_tol: float) -> dict:
+    def evaluate(self, stability_tol: float, objective: dict | None = None) -> dict:
+        objective = objective or {}
         return ev.evaluate(self.case_dir, self.case_cfg["exp_depth_um"],
-                           self.case_cfg["exp_width_um"], stability_tol)
+                           self.case_cfg["exp_width_um"], stability_tol,
+                           depth_weight=float(objective.get("depth_weight", 1.0)),
+                           width_weight=float(objective.get("width_weight", 1.0)),
+                           aspect_ratio_weight=float(
+                               objective.get("aspect_ratio_weight", 1.0)))
 
 
 # --------------------------------------------------------------------------- #
@@ -361,6 +366,7 @@ class Calibrator:
             self.cases = cfg["cases"]
         self.geom = cfg["geometry"]
         self.control = cfg["control"]
+        self.objective = cfg.get("objective", {})
         self.early = cfg["earlyAbort"]
         self.stability_tol = self.early.get("stabilityTol", 0.10)
         self.param_names = pspec_keys(cfg["parameters"])
@@ -417,7 +423,7 @@ class Calibrator:
                 positive_int(p1.get("initSamples", 16), "phase1.initSamples"),
                 self.budget)
         else:
-            self.max_refinement = 2
+            self.max_refinement = int(mp.get("maxRefinement", 2))
             self.budget = positive_int(opt["nSamples"], "optimizer.nSamples")
             self.n_init = positive_int(
                 opt.get("initSamples", min(16, self.budget)),
@@ -848,7 +854,7 @@ class Calibrator:
         entry.update(thermal_stats(job.case_dir))
         if evaluate:
             try:
-                res = job.evaluate(self.stability_tol)
+                res = job.evaluate(self.stability_tol, self.objective)
                 entry.update({
                     "sim_depth_um": res["sim_depth_um"],
                     "sim_width_um": res["sim_width_um"],
@@ -1104,7 +1110,7 @@ class Calibrator:
         }
         if evaluate:
             try:
-                res = job.evaluate(self.stability_tol)
+                res = job.evaluate(self.stability_tol, self.objective)
                 entry.update({k: v for k, v in res.items() if k != "series"})
             except Exception as exc:
                 entry["note"] = f"eval failed: {exc}"
@@ -1501,7 +1507,7 @@ class Calibrator:
             w.writeheader() if False else w.writerow(cols)
             for r in self.records:
                 row = [r["id"], r["status"], r["objective"]]
-                row += [r["params"][p] for p in self.param_names]
+                row += [r["params"].get(p, "") for p in self.param_names]
                 for case in self.cases:
                     c = r["cases"].get(case["name"], {})
                     row += [c.get("status", ""), c.get("metric_source", ""),

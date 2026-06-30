@@ -1,16 +1,18 @@
 {
-  "_comment": "Single-case Hofmann 316L calibration using the current validation analyzer. Target case: 200 W, 900 mm/s, 25 um beam radius. Base mesh is 20 um; maxRefinement=2 gives 5 um finest cells.",
+  "_comment": "Single-case Hofmann 316L calibration using the current validation analyzer. Target case: 200 W, 900 mm/s, 25 um beam radius. Base mesh is 40 um; maxRefinement=2 gives 10 um finest cells.",
 
   "objective": {
-    "_comment": "Case error = mean absolute relative error over depth, width, and aspect ratio. Lower is better.",
+    "_comment": "Case error = weighted mean absolute relative error over depth, width, and aspect ratio. Aspect ratio is weighted higher to prioritize melt-pool shape.",
     "metric": "mean_abs_rel_error_with_ar",
     "depth_weight": 1.0,
-    "width_weight": 1.0
+    "width_weight": 1.0,
+    "aspect_ratio_weight": 3.0
   },
 
   "mesh_phases": {
     "enabled": false,
-    "_comment": "Disabled for this validation calibration: every candidate runs at 20 um base with maxRefinement=2 -> 5 um finest cells."
+    "maxRefinement": 2,
+    "_comment": "Disabled for this validation calibration: every candidate runs at 40 um base with maxRefinement=2 -> 10 um finest cells."
   },
 
   "optimizer": {
@@ -22,30 +24,32 @@
   },
 
   "parameters": {
-    "_comment": "Active 316L thermophysical knobs. table_cp_scale and table_kappa_scale multiply every metal table row, preserving table shape.",
-    "nu":                  {"type": "scalar", "baseline": 1.1626e-6, "min": 1.04634e-6, "max": 1.27886e-6, "_units": "m2/s"},
-    "rho":                 {"type": "scalar", "baseline": 7900.0,   "min": 7110.0,     "max": 8690.0,     "_units": "kg/m3"},
-    "table_kappa_scale":   {"type": "scale",  "baseline": 1.0,      "min": 0.90,       "max": 1.10,       "_units": "-"},
-    "table_cp_scale":      {"type": "scale",  "baseline": 1.0,      "min": 0.90,       "max": 1.10,       "_units": "-"},
+    "_comment": "Active 316L thermal/surface knobs. Solid factors apply at/below Tsolidus; liquid factors apply at/above Tliquidus; the mushy zone is blended linearly.",
+    "nu":                  {"type": "scalar", "baseline": 1.1626e-6, "min": 1.1626e-6, "max": 1.1626e-6, "fixed": true, "_units": "m2/s"},
+    "rho":                 {"type": "scalar", "baseline": 6881.0,   "min": 6881.0,    "max": 6881.0,    "fixed": true, "_units": "kg/m3"},
+    "table_kappa_solid_scale": {"type": "scale", "baseline": 1.0,   "min": 0.90,       "max": 1.10,       "_units": "-"},
+    "table_kappa_liquid_scale": {"type": "scale", "baseline": 1.0,  "min": 0.90,       "max": 1.10,       "_units": "-"},
+    "table_cp_solid_scale":    {"type": "scale", "baseline": 1.0,   "min": 0.90,       "max": 1.10,       "_units": "-"},
+    "table_cp_liquid_scale":   {"type": "scale", "baseline": 1.0,   "min": 0.90,       "max": 1.10,       "_units": "-"},
     "elec_resistivity":    {"type": "scalar", "baseline": 0.95e-6,  "min": 0.855e-6,   "max": 1.045e-6,   "_units": "ohm m"},
-    "sigma":               {"type": "scalar", "baseline": 1.76,     "min": 1.584,      "max": 1.936,      "_units": "N/m"},
+    "sigma":               {"type": "scalar", "baseline": 1.87,     "min": 1.683,      "max": 2.057,      "_units": "N/m"},
     "Marangoni_Constant":  {"type": "scalar", "baseline": -4.9e-4,  "min": -5.39e-4,   "max": -4.41e-4,   "_units": "N/m/K"},
-    "LatentHeatVap":       {"type": "scalar", "baseline": 6.336e6,  "min": 5.7024e6,   "max": 6.9696e6,   "_units": "J/kg"}
+    "LatentHeatVap":       {"type": "scalar", "baseline": 6.336e6,  "min": 6.336e6,    "max": 6.336e6,    "fixed": true, "_units": "J/kg"}
   },
 
   "geometry": {
-    "base_cell": 20e-6,
-    "gas_thickness": 120e-6,
+    "base_cell": 40e-6,
+    "gas_thickness": 80e-6,
     "x_extent": 280e-6,
     "lead_in": 100e-6,
     "tail": 200e-6,
     "substrate_depth_factor": 1.5,
     "substrate_min": 140e-6,
-    "surface_y_um": 120.0
+    "surface_y_um": 80.0
   },
 
   "control": {
-    "endTime": 1.1666666666666668e-3,
+    "endTime": 9.444444444444445e-4,
     "writeInterval": 1e-5,
     "deltaT": 1e-7,
     "maxDeltaT": 1e-6,
@@ -60,9 +64,9 @@
       "v_scan_mm_s": 900,
       "laserRadius_m": 25e-6,
       "laser_start_z_m": 0.000100,
-      "laser_end_z_m": 0.000700,
-      "laser_off_time_s": 6.666666666666667e-4,
-      "end_time_s": 1.1666666666666668e-3,
+      "laser_end_z_m": 0.000500,
+      "laser_off_time_s": 4.4444444444444447e-4,
+      "end_time_s": 9.444444444444445e-4,
       "exp_width_um": 114.6025,
       "exp_depth_um": 93.9525
     }

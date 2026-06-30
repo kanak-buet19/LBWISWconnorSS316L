@@ -120,7 +120,10 @@ def _stable(values: list[float], tol: float) -> tuple[float, bool, int]:
 
 
 def evaluate(case_dir: Path, exp_depth_um: float, exp_width_um: float,
-             stability_tol: float = 0.10) -> dict:
+             stability_tol: float = 0.10,
+             depth_weight: float = 1.0,
+             width_weight: float = 1.0,
+             aspect_ratio_weight: float = 1.0) -> dict:
     series = read_series(case_dir)
     n = len(series)
     depths = [r["depth"] for r in series]
@@ -151,8 +154,15 @@ def evaluate(case_dir: Path, exp_depth_um: float, exp_width_um: float,
               if exp_ar and sim_ar == sim_ar and exp_ar == exp_ar
               else float("nan"))
 
-    errs = [e for e in (abs(depth_err), abs(width_err), ar_err) if e == e]
-    case_error = sum(errs) / len(errs) if errs else float("nan")
+    weighted_errs = [
+        (abs(depth_err), depth_weight),
+        (abs(width_err), width_weight),
+        (ar_err, aspect_ratio_weight),
+    ]
+    weighted_errs = [(e, w) for e, w in weighted_errs if e == e and w > 0]
+    wsum = sum(w for _, w in weighted_errs)
+    case_error = (sum(e * w for e, w in weighted_errs) / wsum
+                  if wsum else float("nan"))
 
     return {
         "n_points": n,
@@ -160,6 +170,9 @@ def evaluate(case_dir: Path, exp_depth_um: float, exp_width_um: float,
         "exp_depth_um": exp_depth_um, "exp_width_um": exp_width_um,
         "depth_err": depth_err, "width_err": width_err,
         "ar_err": ar_err,
+        "depth_weight": depth_weight,
+        "width_weight": width_weight,
+        "aspect_ratio_weight": aspect_ratio_weight,
         "depth_converged": d_conv, "width_converged": w_conv,
         "depth_n_stable": d_n, "width_n_stable": w_n,
         "converged": d_conv and w_conv,

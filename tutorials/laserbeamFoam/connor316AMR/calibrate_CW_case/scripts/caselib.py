@@ -208,13 +208,52 @@ def _scale_table(text: str, name: str, factor: float) -> str:
     return text[:m.start()] + m.group(1) + body + m.group(3) + text[m.end():]
 
 
+def _metal_phase_temperature(text: str, name: str) -> float:
+    m = re.search(rf"(metal\s*\{{.*?\b{name}\s+)([0-9.eE+-]+)\s*;", text, re.S)
+    if not m:
+        raise ValueError(f"metal '{name}' not found")
+    return float(m.group(2))
+
+
+def _scale_table_by_phase(text: str, name: str, solid_factor: float,
+                          liquid_factor: float, t_solidus: float,
+                          t_liquidus: float) -> str:
+    """Scale a table with solid/liquid factors and linear mushy-zone blending."""
+    if t_liquidus <= t_solidus:
+        raise ValueError("Tliquidus must be greater than Tsolidus")
+    m = re.search(rf"({name}[^\n]*\n\s*\()(.*?)(\n\s*\)\s*;)", text, re.S)
+    if not m:
+        raise ValueError(f"table '{name}' not found")
+    n_rows = 0
+
+    def _factor(temp: float) -> float:
+        if temp <= t_solidus:
+            return solid_factor
+        if temp >= t_liquidus:
+            return liquid_factor
+        w = (temp - t_solidus) / (t_liquidus - t_solidus)
+        return solid_factor * (1.0 - w) + liquid_factor * w
+
+    def _row(mm: re.Match) -> str:
+        nonlocal n_rows
+        temp = float(mm.group(1))
+        val = float(mm.group(2)) * _factor(temp)
+        n_rows += 1
+        return f"({mm.group(1)}    {g(val)})"
+
+    body = re.sub(r"\(\s*([0-9.eE+-]+)\s+([0-9.eE+-]+)\s*\)", _row, m.group(2))
+    if n_rows == 0:
+        raise ValueError(f"table '{name}': no rows found")
+    return text[:m.start()] + m.group(1) + body + m.group(3) + text[m.end():]
+
+
 def patch_transportProperties(path: Path, params: dict,
                                v_scan_mm_s: float = 900.0) -> None:
     """Patch candidate thermophysical parameters into transportProperties.
 
-    The cp/kappa tables are scaled as whole tables. This keeps the optimizer
-    dimensionality manageable while still allowing thermal diffusivity changes.
-    V_scan is patched per case.
+    The cp/kappa tables can be scaled either as whole tables using the legacy
+    table_*_scale parameters, or split into solid/liquid factors with linear
+    blending through the mushy interval. V_scan is patched per case.
     """
     t = path.read_text()
 
@@ -227,8 +266,22 @@ def patch_transportProperties(path: Path, params: dict,
     t = _sub_entry_in_block(t, "metal", "nu", g(params["nu"]))
 
     # -- cp / kappa tables --------------------------------------------------
-    t = _scale_table(t, "table_kappa", params["table_kappa_scale"])
-    t = _scale_table(t, "table_cp", params["table_cp_scale"])
+    t_solidus = _metal_phase_temperature(t, "Tsolidus")
+    t_liquidus = _metal_phase_temperature(t, "Tliquidus")
+
+    if "table_kappa_solid_scale" in params or "table_kappa_liquid_scale" in params:
+        k_solid = params.get("table_kappa_solid_scale", params.get("table_kappa_scale", 1.0))
+        k_liquid = params.get("table_kappa_liquid_scale", params.get("table_kappa_scale", 1.0))
+        t = _scale_table_by_phase(t, "table_kappa", k_solid, k_liquid, t_solidus, t_liquidus)
+    else:
+        t = _scale_table(t, "table_kappa", params["table_kappa_scale"])
+
+    if "table_cp_solid_scale" in params or "table_cp_liquid_scale" in params:
+        cp_solid = params.get("table_cp_solid_scale", params.get("table_cp_scale", 1.0))
+        cp_liquid = params.get("table_cp_liquid_scale", params.get("table_cp_scale", 1.0))
+        t = _scale_table_by_phase(t, "table_cp", cp_solid, cp_liquid, t_solidus, t_liquidus)
+    else:
+        t = _scale_table(t, "table_cp", params["table_cp_scale"])
 
     # -- case-specific scan speed -------------------------------------------
     t = _sub_entry(t, "V_scan", g(v_scan_mm_s / 1000.0))
