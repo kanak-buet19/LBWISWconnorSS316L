@@ -142,5 +142,6 @@ apptainer exec --cleanenv \
     --env MPLCONFIGDIR=/tmp \
     --env DELETE_ANALYZED_VTK="${DELETE_ANALYZED_VTK:-true}" \
     "$OF2506_IMAGE" \
-    bash -lc "source /openfoam/bash.rc && cd '$caseDir' && ./Allrun \"$@\""
+    bash -lc 'source /openfoam/bash.rc && cd "$1" && shift && ./Allrun "$@"' \
+        bash "$caseDir" "$@"
 echo "Parametric sweep completed at: $(date)"
