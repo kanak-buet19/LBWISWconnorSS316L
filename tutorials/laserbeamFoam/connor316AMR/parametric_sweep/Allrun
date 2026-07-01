@@ -1,0 +1,21 @@
+#!/bin/bash
+set -euo pipefail
+
+caseDir="$(cd "$(dirname "$0")" && pwd)"
+cd "$caseDir"
+
+export PYTHON="${PYTHON:-/home/kanak/.venv/venv314/bin/python}"
+export PARAM_TOTAL_CORES="${PARAM_TOTAL_CORES:-16}"
+export PARAM_CORES_PER_SIM="${PARAM_CORES_PER_SIM:-4}"
+export MPLCONFIGDIR="$caseDir/.mplconfig"
+mkdir -p "$MPLCONFIGDIR"
+
+echo "=== CW parametric sweep ==="
+echo "Template           = ../calibrate_CW_case/template_case"
+echo "PYTHON             = $PYTHON"
+echo "WM_PROJECT_DIR     = ${WM_PROJECT_DIR:-UNSET (source OpenFOAM first!)}"
+echo "PARAM_TOTAL_CORES  = $PARAM_TOTAL_CORES"
+echo "PARAM_CORES_PER_SIM= $PARAM_CORES_PER_SIM"
+echo "==========================="
+
+exec "$PYTHON" scripts/run_parametric_sweep.py "$@"

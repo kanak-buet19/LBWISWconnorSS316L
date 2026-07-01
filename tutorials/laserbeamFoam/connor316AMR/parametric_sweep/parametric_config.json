@@ -1,0 +1,38 @@
+{
+  "description": "Four-case CW parametric sweep from the calibration template. Process conditions stay at the calibration baseline; only one solid-phase transport table scale is increased per case.",
+  "template_case": "../calibrate_CW_case/template_case",
+  "baseline_config": "../calibrate_CW_case/calibration_config.json",
+  "case_root": "cases",
+  "results_root": "results",
+  "case_index": 0,
+  "max_refinement": 2,
+  "geometry_overrides": {
+    "base_cell": 24e-6
+  },
+  "sweep_cases": [
+    {
+      "case_id": "solid_cp_p10",
+      "label": "Solid specific heat +10%",
+      "parameter": "table_cp_solid_scale",
+      "value": 1.10
+    },
+    {
+      "case_id": "solid_cp_p20",
+      "label": "Solid specific heat +20%",
+      "parameter": "table_cp_solid_scale",
+      "value": 1.20
+    },
+    {
+      "case_id": "solid_kappa_p10",
+      "label": "Solid thermal conductivity +10%",
+      "parameter": "table_kappa_solid_scale",
+      "value": 1.10
+    },
+    {
+      "case_id": "solid_kappa_p20",
+      "label": "Solid thermal conductivity +20%",
+      "parameter": "table_kappa_solid_scale",
+      "value": 1.20
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+cases/
+results/
+.mplconfig/
+scripts/__pycache__/
+*.out
+*.err

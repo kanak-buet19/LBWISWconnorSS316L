@@ -1,0 +1,8 @@
+#!/bin/bash
+set -euo pipefail
+
+caseDir="$(cd "$(dirname "$0")" && pwd)"
+cd "$caseDir"
+
+rm -rf cases results .mplconfig scripts/__pycache__
+mkdir -p cases results
