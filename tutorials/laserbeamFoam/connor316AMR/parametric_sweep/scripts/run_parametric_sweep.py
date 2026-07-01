@@ -112,7 +112,7 @@ def generate_cases(config: dict[str, Any], calib_config: dict[str, Any]) -> list
     geom = dict(calib_config["geometry"])
     geom.update(config.get("geometry_overrides", {}))
     control = calib_config["control"]
-    cores = int(os.environ.get("PARAM_CORES_PER_SIM", "4"))
+    cores = int(os.environ.get("PARAM_CORES_PER_SIM", "8"))
     max_refinement = int(config.get("max_refinement", 2))
     base_params = baseline_params(calib_config)
 
@@ -124,8 +124,10 @@ def generate_cases(config: dict[str, Any], calib_config: dict[str, Any]) -> list
     rows: list[dict[str, Any]] = []
     for item in config["sweep_cases"]:
         case_id = item["case_id"]
+        parameter = item.get("parameter", "baseline")
         params = dict(base_params)
-        params[item["parameter"]] = float(item["value"])
+        if parameter != "baseline":
+            params[parameter] = float(item["value"])
         dest = case_root / case_id
         build = caselib.build_case(
             template,
@@ -140,8 +142,8 @@ def generate_cases(config: dict[str, Any], calib_config: dict[str, Any]) -> list
         row = {
             "case_id": case_id,
             "label": item["label"],
-            "parameter": item["parameter"],
-            "baseline_value": base_params[item["parameter"]],
+            "parameter": parameter,
+            "baseline_value": None if parameter == "baseline" else base_params[parameter],
             "value": float(item["value"]),
             "case_dir": str(dest.relative_to(ROOT)),
             "target_width_um": case_cfg["exp_width_um"],
@@ -258,6 +260,125 @@ def run_case(
     return int(process.returncode or 0)
 
 
+def start_case(
+    row: dict[str, Any],
+    env: dict[str, str],
+    log_path: Path,
+    verbose: bool,
+) -> tuple[subprocess.Popen[str], Any]:
+    case_dir = ROOT / row["case_dir"]
+    run_env = dict(env)
+    surface_y = case_surface_y(case_dir)
+    if surface_y is not None:
+        run_env["SURFACE_Y_UM"] = f"{surface_y:.8g}"
+    run_env.setdefault("FOAM_SIGFPE", "0")
+    run_env.setdefault("MPLCONFIGDIR", str(ROOT / ".mplconfig"))
+    run_env.setdefault("DELETE_ANALYZED_VTK", "true")
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if verbose:
+        process = subprocess.Popen(["./Allrun_long"], cwd=case_dir, env=run_env, text=True)
+        return process, None
+
+    log_handle = log_path.open("w")
+    process = subprocess.Popen(
+        ["./Allrun_long"],
+        cwd=case_dir,
+        env=run_env,
+        stdout=log_handle,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    return process, log_handle
+
+
+def status_text(row: dict[str, Any]) -> str:
+    case_dir = ROOT / row["case_dir"]
+    progress = sim_progress(case_dir)
+    if progress is None:
+        return f"{row['case_id']}: starting"
+    sim_time, delta_t = progress
+    end_time = float(row["end_time_s"])
+    pct = 0.0 if end_time <= 0 else min(max(100.0 * sim_time / end_time, 0.0), 100.0)
+    dt_text = "n/a" if delta_t is None else f"{delta_t:.2e}"
+    return f"{row['case_id']}: {pct:5.1f}% t={sim_time:.3e}s dt={dt_text}"
+
+
+def run_parallel_cases(
+    selected_rows: list[dict[str, Any]],
+    calib_config: dict[str, Any],
+    results_root: Path,
+    env: dict[str, str],
+    slots: int,
+    skip_existing: bool,
+    verbose: bool,
+) -> list[dict[str, Any]]:
+    pending = list(selected_rows)
+    running: list[dict[str, Any]] = []
+    completed: list[dict[str, Any]] = []
+    run_logs = results_root / "run_logs"
+    started = 0
+    total = len(selected_rows)
+    last_progress = 0.0
+
+    def launch_next() -> bool:
+        nonlocal started
+        if not pending or len(running) >= slots:
+            return False
+
+        row = pending.pop(0)
+        case_id = row["case_id"]
+        case_dir = ROOT / row["case_dir"]
+        final_csv = case_dir / ev.FINAL_CSV_REL
+        series_csv = case_dir / ev.CSV_REL
+
+        if skip_existing and (final_csv.exists() or series_csv.exists()):
+            started += 1
+            print(f"[skip] {started}/{total} {case_id}", flush=True)
+            completed.append(evaluate_case(row, calib_config, "skipped_existing", 0))
+            write_summary(results_root, completed)
+            return True
+
+        started += 1
+        print(f"[run] {started}/{total} {case_id}: {row['label']}", flush=True)
+        process, log_handle = start_case(row, env, run_logs / f"{case_id}.log", verbose)
+        running.append({"row": row, "process": process, "log_handle": log_handle})
+        return True
+
+    while pending and len(running) < slots:
+        launch_next()
+
+    while running or pending:
+        for item in list(running):
+            process = item["process"]
+            return_code = process.poll()
+            if return_code is None:
+                continue
+
+            if item["log_handle"] is not None:
+                item["log_handle"].close()
+            running.remove(item)
+            row = item["row"]
+            case_dir = ROOT / row["case_dir"]
+            final_csv = case_dir / ev.FINAL_CSV_REL
+            series_csv = case_dir / ev.CSV_REL
+            status = "complete" if return_code == 0 and (final_csv.exists() or series_csv.exists()) else "failed"
+            completed.append(evaluate_case(row, calib_config, status, return_code))
+            write_summary(results_root, completed)
+            print(f"[{status}] {row['case_id']} return_code={return_code}", flush=True)
+
+            while pending and len(running) < slots:
+                launch_next()
+
+        now = time.monotonic()
+        if running and (now - last_progress >= 30.0):
+            print("[progress] " + " | ".join(status_text(item["row"]) for item in running), flush=True)
+            last_progress = now
+        time.sleep(5)
+
+    return completed
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--generate-only", action="store_true", help="Build cases and manifest, then stop.")
@@ -286,44 +407,28 @@ def main() -> None:
     only = set(args.only or [])
     env = os.environ.copy()
     env.setdefault("PYTHON", os.environ.get("PYTHON", sys.executable))
-    rows: list[dict[str, Any]] = []
-    run_logs = results_root / "run_logs"
-    selected_rows = [row for row in read_manifest(results_root) if not only or row["case_id"] in only]
-    total_selected = len(selected_rows)
-    selected_index = 0
+    manifest_rows = read_manifest(results_root)
+    selected_rows = [row for row in manifest_rows if not only or row["case_id"] in only]
+    if not selected_rows:
+        raise SystemExit("No cases selected.")
 
-    for row in read_manifest(results_root):
-        case_id = row["case_id"]
-        case_dir = ROOT / row["case_dir"]
-        final_csv = case_dir / ev.FINAL_CSV_REL
-        series_csv = case_dir / ev.CSV_REL
+    total_cores = int(os.environ.get("PARAM_TOTAL_CORES", "32"))
+    cores_per_sim = int(os.environ.get("PARAM_CORES_PER_SIM", "8"))
+    slots = max(1, total_cores // max(1, cores_per_sim))
+    slots = min(slots, len(selected_rows))
+    print(f"Run plan: {len(selected_rows)} cases, {cores_per_sim} cores/case, {slots} parallel slots")
 
-        if only and case_id not in only:
-            rows.append(dict(row, status="not_selected", return_code=None))
-            continue
-        selected_index += 1
-        if args.skip_existing and (final_csv.exists() or series_csv.exists()):
-            rows.append(evaluate_case(row, calib_config, "skipped_existing", 0))
-            write_summary(results_root, rows)
-            print(f"[skip] {selected_index}/{total_selected} {case_id}")
-            continue
-
-        print(f"[run] {selected_index}/{total_selected} {case_id}: {row['label']}", flush=True)
-        return_code = run_case(
-            case_dir,
-            run_logs / f"{case_id}.log",
-            env,
-            args.verbose,
-            selected_index,
-            total_selected,
-            case_id,
-            float(row["end_time_s"]),
-        )
-        status = "complete" if return_code == 0 and (final_csv.exists() or series_csv.exists()) else "failed"
-        rows.append(evaluate_case(row, calib_config, status, return_code))
-        write_summary(results_root, rows)
-        print(f"[{status}] {case_id}", flush=True)
-
+    rows = run_parallel_cases(
+        selected_rows,
+        calib_config,
+        results_root,
+        env,
+        slots,
+        args.skip_existing,
+        args.verbose,
+    )
+    not_selected = [dict(row, status="not_selected", return_code=None) for row in manifest_rows if only and row["case_id"] not in only]
+    rows.extend(not_selected)
     write_summary(results_root, rows)
     print(f"Wrote {results_root / 'summary.csv'}")
 

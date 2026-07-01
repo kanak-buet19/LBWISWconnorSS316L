@@ -1,5 +1,5 @@
 {
-  "description": "Four-case CW parametric sweep from the calibration template. Process conditions stay at the calibration baseline; only one solid-phase transport table scale is increased per case.",
+  "description": "Five-case CW parametric sweep from the calibration template: one baseline plus four solid-property increases. Process conditions stay at the calibration baseline.",
   "template_case": "../calibrate_CW_case/template_case",
   "baseline_config": "../calibrate_CW_case/calibration_config.json",
   "case_root": "cases",
@@ -10,6 +10,12 @@
     "base_cell": 24e-6
   },
   "sweep_cases": [
+    {
+      "case_id": "baseline",
+      "label": "Baseline",
+      "parameter": "baseline",
+      "value": 1.0
+    },
     {
       "case_id": "solid_cp_p10",
       "label": "Solid specific heat +10%",
