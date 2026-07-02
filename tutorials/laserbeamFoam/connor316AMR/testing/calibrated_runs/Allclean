@@ -1,0 +1,25 @@
+#!/bin/bash
+
+set -e
+
+suiteDir="$(cd "$(dirname "$0")" && pwd)"
+cd "$suiteDir"
+
+for caseDir in cases/*; do
+    [ -d "$caseDir" ] || continue
+    echo "===== Cleaning $(basename "$caseDir") ====="
+    (
+        cd "$caseDir"
+        if [ -x ./Allclean_long ]; then
+            ./Allclean_long
+        else
+            echo "Skipping case-local clean; Allclean_long is missing"
+        fi
+    )
+done
+
+echo "Removing generated case folders"
+rm -rf cases
+
+echo "Removing Slurm output files"
+rm -f validation_*.out validation_*.err slurm-*.out

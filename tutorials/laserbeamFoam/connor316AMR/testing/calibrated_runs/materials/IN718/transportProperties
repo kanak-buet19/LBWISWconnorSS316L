@@ -1,0 +1,122 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      transportProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Interface tracking method: isoAdvector or MULES
+interfaceTrackingScheme MULES;
+
+phases          (metal gas);
+
+metal
+{
+    transportModel  Newtonian;     // Viscosity model for the metal phase
+    nu              6.7e-7;        // Kinematic viscosity [m2/s]
+
+    rho             7600;          // Density [kg/m3]
+
+    Tsolidus 1533;                 // Solidus temperature [K]
+    Tliquidus 1609;                // Liquidus temperature [K]
+    LatentHeat 250e3;              // Latent heat of fusion [J/kg]
+    beta    1.3e-5;                // Thermal expansion coefficient [1/K]
+
+    table_kappa
+    (
+        (300    8.55)
+        (400    10.45)
+        (500    12.35)
+        (600    17.10)
+        (800    19.95)
+        (1000   25.65)
+        (1100   25.65)
+        (1300   29.79)
+        (1531   30.86)
+        (1612   31.81)
+        (2500   32.98)
+        (5000   32.98)
+    );
+
+    table_cp
+    (
+        (298   425)
+        (400   447)
+        (500   468)
+        (600   489)
+        (700   510)
+        (800   531)
+        (1100  620)
+        (1200  620)
+        (1300  620)
+        (1400  620)
+        (2500  630)   // Hold constant beyond 1400 K
+        (5000  630)   // increase cp ---wider width
+    );
+    elec_resistivity	1e-6;        // Electrical resistivity [ohm m]; calibrated (50um mesh, score 7.79); coarse 125um best was 2.45e-6
+}
+
+gas
+{
+    transportModel  Newtonian;     // Viscosity model for the gas phase
+
+    nu              1.53e-05;      // Kinematic viscosity [m2/s]
+
+    rho             1.622;         // Density [kg/m3]
+
+    poly_kappa   (0.0177 0 0 0 0 0 0 0);     // Gas thermal conductivity polynomial [W/m/K]
+    poly_cp   (520.3 0.0 0 0 0 0 0 0);       // Gas specific heat polynomial [J/kg/K]
+
+    Tsolidus    1.0;              // Dummy gas solidus temperature [K]
+    Tliquidus   10.0;             // Dummy gas liquidus temperature [K]
+    LatentHeat  1;                // Dummy gas latent heat [J/kg]
+    beta    4.0e-5;               // Gas thermal expansion coefficient [1/K]
+}
+
+emS                         0.26;       // Solid emissivity [-]
+emL                         0.26;       // Liquid emissivity [-]
+TRef                        300;        // Radiation reference/background temperature [K]
+T_ambient                   300;        // Ambient temperature for convection [K]
+h_convection                0;          // Convective heat transfer coefficient [W/m2/K]
+
+sigma            1.8;            // Surface tension [N/m]
+Marangoni_Constant	-3.7e-4;    // d(sigma)/dT for Marangoni force [N/m/K]
+p0	101325.0;                    // Atmospheric pressure reference [Pa]
+p_amb   101325.0;                 // Ambient chamber pressure used to choose Tvap [Pa]
+beta_r  0.18;                    // Recoil pressure accommodation coefficient [-]
+Tvap	3000.0;                    // Vaporization temperature at p_amb [K]
+Tvap_atm    3000.0;                // Vaporization temperature at p0 [K]
+recoilPressureModel condensation; // condensation or modifiedReducedPressure
+recoilTransitionWidth       100; // Smooth recoil activation width above Tvap [K]
+Mm	0.0585;                       // Molar mass [kg/mol]
+LatentHeatVap 7340000.0;            // Latent heat of vaporization [J/kg]
+
+LeeCoeff        0;              // Lee volumetric evaporation coeff [1/s]
+                                // 0 = disabled (interface Qv only)
+                                // 1e5 = moderate clamp (~300 K overshoot)
+                                // 1e7 = tight clamp (~30 K overshoot)
+                                // Derived from kinetic theory (Lee 1980; Chen+ 2020)
+
+// ---- Vapor plume Beer-Lambert attenuation (Yang et al. 2026 IJHMT, Eq. 31-35) ----
+// When vaporPlumeAttenuation is true, rays lose energy traversing vapor above/inside
+// the keyhole: I_out = I_in * exp(-alpha_attennu * s_eff).
+// alpha_attennu = muAlphaMax * min(p_total/pVaporMax, 1)  [1/m]
+// p_total = domain-integral of Clausius-Clapeyron saturation vapor pressure [Pa·m³].
+// pVaporMax is mesh- and material-dependent — calibrate against known keyhole depth
+// (reduce until simulated depth matches experiment; typical starting range 1e-8 to 1e-6).
+vaporPlumeAttenuation   false;
+muAlphaMax              310;        // [1/m]    per Yang et al. 2026 Table
+pVaporMax               1e-7;       // [Pa·m³]  calibrate per material and mesh resolution
+H_plume                 1e-3;       // [m]      effective plume height above surface
+uMax                    1.5;        // [m/s]    scanning speed above which plume saturates
+
+// ************************************************************************* //

@@ -1,0 +1,169 @@
+#!/bin/bash
+
+set -e
+
+suiteDir="$(cd "$(dirname "$0")" && pwd)"
+cd "$suiteDir"
+
+if [ "$#" -eq 0 ]; then
+    mapfile -t menuCases < <(python3 scripts/setup_cases.py --list-enabled)
+    echo "Select case to run:"
+    echo "  0) all"
+    i=1
+    for caseName in "${menuCases[@]}"; do
+        echo "  ${i}) ${caseName}"
+        i=$((i + 1))
+    done
+    printf "choice [0-%d] (space/comma separated ok): " "${#menuCases[@]}"
+    read -r choice
+    choice="${choice//,/ }"
+    if [ -z "$choice" ]; then
+        set -- --all
+    else
+        selectedArgs=()
+        for item in $choice; do
+            if [ "$item" = "0" ] || [ "$item" = "all" ]; then
+                selectedArgs=(--all)
+                break
+            elif [[ "$item" =~ ^[0-9]+$ ]] && [ "$item" -ge 1 ] && [ "$item" -le "${#menuCases[@]}" ]; then
+                selectedArgs+=(--case "${menuCases[$((item - 1))]}")
+            else
+                echo "Invalid choice: $item" >&2
+                exit 2
+            fi
+        done
+        set -- "${selectedArgs[@]}"
+    fi
+fi
+
+python3 scripts/setup_cases.py "$@"
+
+for arg in "$@"; do
+    if [ "$arg" = "--setup-only" ] || [ "$arg" = "--list-enabled" ] || [ "$arg" = "--list" ]; then
+        exit 0
+    fi
+done
+
+mapfile -t caseNames < <(python3 scripts/setup_cases.py --list "$@")
+
+set_case_cores()
+{
+    local caseName="$1"
+    local cores="$2"
+    local dict="cases/${caseName}/system/decomposeParDict"
+
+    python3 - "$dict" "$cores" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+cores = sys.argv[2]
+text = path.read_text()
+new_text, count = re.subn(
+    r"^numberOfSubdomains\s+\d+\s*;",
+    f"numberOfSubdomains  {cores};",
+    text,
+    count=1,
+    flags=re.MULTILINE,
+)
+if count != 1:
+    raise SystemExit(f"numberOfSubdomains entry not found in {path}")
+path.write_text(new_text)
+PY
+}
+
+run_case()
+{
+    local caseName="$1"
+    local cores="$2"
+
+    set_case_cores "$caseName" "$cores"
+    (
+        cd "cases/${caseName}"
+        echo "===== Running ${caseName} on ${cores} cores ====="
+        ./Allclean_long
+        ./Allrun
+    )
+}
+
+run_batch()
+{
+    local startIndex="$1"
+    local batchSize="$2"
+    local cores="$3"
+    local pids=()
+    local names=()
+    local results=()
+    local monitorArgs=()
+    local monitorPid=""
+    local i=0
+    local caseName=""
+    local status=0
+
+    echo
+    echo "===== Starting batch: ${batchSize} case(s), ${cores} cores each ====="
+    if [ "$batchSize" -eq 1 ]; then
+        caseName="${caseNames[$startIndex]}"
+        echo "  -> ${caseName}"
+        run_case "$caseName" "$cores"
+        echo "  OK: ${caseName}"
+        return
+    fi
+
+    for ((i = 0; i < batchSize; i++)); do
+        caseName="${caseNames[$((startIndex + i))]}"
+        names+=("$caseName")
+        monitorArgs+=(--case "$caseName")
+        echo "  -> ${caseName} (log: cases/${caseName}/log.validationAllrun)"
+        run_case "$caseName" "$cores" > "cases/${caseName}/log.validationAllrun" 2>&1 &
+        pids+=("$!")
+    done
+
+    python3 scripts/monitor_case_progress.py --cores "$cores" --interval 2 "${monitorArgs[@]}" &
+    monitorPid="$!"
+
+    for ((i = 0; i < batchSize; i++)); do
+        if wait "${pids[$i]}"; then
+            results[$i]=0
+        else
+            results[$i]=1
+            status=1
+        fi
+    done
+
+    kill "$monitorPid" 2>/dev/null || true
+    wait "$monitorPid" 2>/dev/null || true
+    echo
+
+    for ((i = 0; i < batchSize; i++)); do
+        if [ "${results[$i]}" -eq 0 ]; then
+            echo "  OK: ${names[$i]}"
+        else
+            echo "  FAILED: ${names[$i]} (see cases/${names[$i]}/log.validationAllrun)" >&2
+        fi
+    done
+
+    if [ "$status" -ne 0 ]; then
+        exit "$status"
+    fi
+}
+
+totalCases="${#caseNames[@]}"
+index=0
+while [ "$index" -lt "$totalCases" ]; do
+    remaining=$((totalCases - index))
+    if [ "$remaining" -ge 4 ]; then
+        run_batch "$index" 4 4
+        index=$((index + 4))
+    elif [ "$remaining" -eq 3 ]; then
+        run_batch "$index" 2 8
+        index=$((index + 2))
+    elif [ "$remaining" -eq 2 ]; then
+        run_batch "$index" 2 8
+        index=$((index + 2))
+    else
+        run_batch "$index" 1 8
+        index=$((index + 1))
+    fi
+done
