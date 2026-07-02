@@ -220,6 +220,34 @@ const Switch useTdepSigma
     transportProperties.lookupOrDefault<Switch>("variableSurfaceTension", false)
 );
 
+const word surfaceTensionModel
+(
+    transportProperties.lookupOrDefault<word>("surfaceTensionModel", "linear")
+);
+
+const Switch useTdepMarangoni
+(
+    transportProperties.lookupOrDefault<Switch>("variableMarangoni", false)
+);
+
+const word MarangoniModel
+(
+    transportProperties.lookupOrDefault<word>("MarangoniModel", "constant")
+);
+
+const scalar sulfurActivity
+(
+    transportProperties.lookupOrDefault<scalar>("sulfurActivity", 0.0)
+);
+
+const scalar FeSGasConstant = 8314.0;
+const scalar FeSGammaS = 1.3e-8;
+const scalar FeSAdsorptionHeat = 1.66e8;
+const scalar FeSAdsorptionEntropy = 0.00318;
+const scalar FeSPureSlope = 4.3e-4;
+const scalar FeSPureSigma = 1.943;
+const scalar FeSTm = 1809.0;
+
 volScalarField sigmaField
 (
     IOobject
@@ -232,6 +260,20 @@ volScalarField sigmaField
     ),
     mesh,
     sigma_ref
+);
+
+volScalarField dSigmaDtf
+(
+    IOobject
+    (
+        "dSigmaDtf",
+        runTime.timeName(),
+        mesh,
+        IOobject::NO_READ,
+        IOobject::NO_WRITE
+    ),
+    mesh,
+    Marangoni_Constant
 );
 
 const dimensionedScalar p0

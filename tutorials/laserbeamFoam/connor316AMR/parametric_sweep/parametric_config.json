@@ -7,7 +7,17 @@
   "case_index": 0,
   "max_refinement": 2,
   "geometry_overrides": {
-    "base_cell": 24e-6
+    "base_cell": 40e-6,
+    "tail": 100e-6
+  },
+  "case_overrides": {
+    "laser_start_z_m": 50e-6,
+    "laser_end_z_m": 250e-6,
+    "laser_off_time_s": 2.2222222222222224e-4,
+    "end_time_s": 4.7222222222222225e-4
+  },
+  "parameter_overrides": {
+    "elec_resistivity": 9e-7
   },
   "sweep_cases": [
     {

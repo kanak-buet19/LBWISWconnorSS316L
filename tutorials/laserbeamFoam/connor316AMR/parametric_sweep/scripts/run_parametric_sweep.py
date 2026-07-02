@@ -109,12 +109,15 @@ def generate_cases(config: dict[str, Any], calib_config: dict[str, Any]) -> list
     results_root.mkdir(parents=True, exist_ok=True)
 
     case_cfg = calib_config["cases"][int(config.get("case_index", 0))]
+    case_cfg = dict(case_cfg)
+    case_cfg.update(config.get("case_overrides", {}))
     geom = dict(calib_config["geometry"])
     geom.update(config.get("geometry_overrides", {}))
     control = calib_config["control"]
-    cores = int(os.environ.get("PARAM_CORES_PER_SIM", "8"))
+    cores = int(os.environ.get("PARAM_CORES_PER_SIM", "4"))
     max_refinement = int(config.get("max_refinement", 2))
     base_params = baseline_params(calib_config)
+    base_params.update(config.get("parameter_overrides", {}))
 
     active_ids = {item["case_id"] for item in config["sweep_cases"]}
     for old_case in case_root.iterdir():
@@ -219,6 +222,14 @@ def write_summary(results_root: Path, rows: list[dict[str, Any]]) -> None:
         writer.writerows(rows)
 
 
+def write_dashboard() -> None:
+    subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "make_dashboard.py")],
+        cwd=ROOT,
+        check=False,
+    )
+
+
 def run_case(
     case_dir: Path,
     log_path: Path,
@@ -320,6 +331,7 @@ def run_parallel_cases(
     started = 0
     total = len(selected_rows)
     last_progress = 0.0
+    last_dashboard = 0.0
 
     def launch_next() -> bool:
         nonlocal started
@@ -365,6 +377,7 @@ def run_parallel_cases(
             status = "complete" if return_code == 0 and (final_csv.exists() or series_csv.exists()) else "failed"
             completed.append(evaluate_case(row, calib_config, status, return_code))
             write_summary(results_root, completed)
+            write_dashboard()
             print(f"[{status}] {row['case_id']} return_code={return_code}", flush=True)
 
             while pending and len(running) < slots:
@@ -374,6 +387,9 @@ def run_parallel_cases(
         if running and (now - last_progress >= 30.0):
             print("[progress] " + " | ".join(status_text(item["row"]) for item in running), flush=True)
             last_progress = now
+        if running and (now - last_dashboard >= 60.0):
+            write_dashboard()
+            last_dashboard = now
         time.sleep(5)
 
     return completed
@@ -412,8 +428,8 @@ def main() -> None:
     if not selected_rows:
         raise SystemExit("No cases selected.")
 
-    total_cores = int(os.environ.get("PARAM_TOTAL_CORES", "32"))
-    cores_per_sim = int(os.environ.get("PARAM_CORES_PER_SIM", "8"))
+    total_cores = int(os.environ.get("PARAM_TOTAL_CORES", "16"))
+    cores_per_sim = int(os.environ.get("PARAM_CORES_PER_SIM", "4"))
     slots = max(1, total_cores // max(1, cores_per_sim))
     slots = min(slots, len(selected_rows))
     print(f"Run plan: {len(selected_rows)} cases, {cores_per_sim} cores/case, {slots} parallel slots")
@@ -430,6 +446,7 @@ def main() -> None:
     not_selected = [dict(row, status="not_selected", return_code=None) for row in manifest_rows if only and row["case_id"] not in only]
     rows.extend(not_selected)
     write_summary(results_root, rows)
+    write_dashboard()
     print(f"Wrote {results_root / 'summary.csv'}")
 
 

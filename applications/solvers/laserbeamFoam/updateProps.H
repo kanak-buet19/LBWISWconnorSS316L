@@ -96,7 +96,75 @@
 
     alpha_smoothed = fvc::average(alpha1);
 
-    if (useTdepSigma)
+    dSigmaDtf = Marangoni_Constant;
+
+    if
+    (
+        (useTdepSigma && surfaceTensionModel == "FeS")
+     || (useTdepMarangoni && MarangoniModel == "FeS")
+    )
+    {
+        const bool updateSigmaField = useTdepSigma && surfaceTensionModel == "FeS";
+        scalarField& sigmaI = sigmaField.primitiveFieldRef();
+        scalarField& dSigmaDtI = dSigmaDtf.primitiveFieldRef();
+        const scalarField& TI = T;
+
+        forAll(sigmaI, celli)
+        {
+            const scalar Tc = min(max(TI[celli], Tliquidus1.value()), Tvap.value());
+            const scalar B =
+                FeSAdsorptionEntropy*sulfurActivity
+               *Foam::exp(FeSAdsorptionHeat/(FeSGasConstant*Tc));
+
+            if (updateSigmaField)
+            {
+                sigmaI[celli] =
+                    FeSPureSigma
+                  - FeSPureSlope*(Tc - FeSTm)
+                  - FeSGasConstant*Tc*FeSGammaS*Foam::log(1.0 + B);
+            }
+
+            dSigmaDtI[celli] =
+              - FeSPureSlope
+              - FeSGasConstant*FeSGammaS*Foam::log(1.0 + B)
+              + FeSGammaS*FeSAdsorptionHeat/Tc*(B/(1.0 + B));
+        }
+
+        forAll(sigmaField.boundaryFieldRef(), patchi)
+        {
+            fvPatchScalarField& sigmaP = sigmaField.boundaryFieldRef()[patchi];
+            fvPatchScalarField& dSigmaDtP = dSigmaDtf.boundaryFieldRef()[patchi];
+            const scalarField& TP = T.boundaryField()[patchi];
+
+            forAll(sigmaP, facei)
+            {
+                const scalar Tc = min(max(TP[facei], Tliquidus1.value()), Tvap.value());
+                const scalar B =
+                    FeSAdsorptionEntropy*sulfurActivity
+                   *Foam::exp(FeSAdsorptionHeat/(FeSGasConstant*Tc));
+
+                if (updateSigmaField)
+                {
+                    sigmaP[facei] =
+                        FeSPureSigma
+                      - FeSPureSlope*(Tc - FeSTm)
+                      - FeSGasConstant*Tc*FeSGammaS*Foam::log(1.0 + B);
+                }
+
+                dSigmaDtP[facei] =
+                  - FeSPureSlope
+                  - FeSGasConstant*FeSGammaS*Foam::log(1.0 + B)
+                  + FeSGammaS*FeSAdsorptionHeat/Tc*(B/(1.0 + B));
+            }
+        }
+
+        if (updateSigmaField)
+        {
+            sigmaField.correctBoundaryConditions();
+        }
+        dSigmaDtf.correctBoundaryConditions();
+    }
+    else if (useTdepSigma)
     {
         // Linear σ(T) clamped: constant sigma_ref for T < Tliquidus,
         // linear for Tliquidus <= T <= Tvap, constant sigma_at_Tvap for T > Tvap

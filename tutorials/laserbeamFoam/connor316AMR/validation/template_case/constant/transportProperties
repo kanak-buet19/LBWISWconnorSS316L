@@ -12,93 +12,134 @@ FoamFile
     class       dictionary;
     object      transportProperties;
 }
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+// ************************************************************************* //
 
-// Interface tracking method: isoAdvector or MULES
-interfaceTrackingScheme MULES;
+interfaceTrackingScheme MULES;         // isoAdvector or MULES
 
 phases          (metal gas);
 
+
+// ------------------------------------------------------------------------- //
+// Metal: SS316 / SS316L
+// kappa(T) = 0.0146*T + 10.3 for T < 1723 K; 26.9 above liquidus.
+// cp(T)    = 0.24*T + 420.8 for T < 1723 K; 790 above liquidus.
+// Density is kept at the liquid value used by the current solver setup.
+// ------------------------------------------------------------------------- //
+
 metal
 {
-    transportModel  Newtonian;     // Viscosity model for the metal phase
-    nu              1.1626e-6;     // Kinematic viscosity [m2/s]
+    transportModel      Newtonian;
 
-    rho             6881;          // Density [kg/m3]
+    rho                 6881;          // Density [kg/m3]
+    nu                  1.16262171e-6; // Kinematic viscosity [m2/s] = 8e-3 Pa.s / rho
 
-    Tsolidus 1658;                 // Solidus temperature [K]
-    Tliquidus 1723;                // Liquidus temperature [K]
-    LatentHeat 260e3;              // Latent heat of fusion [J/kg]
-    beta    1.8e-5;                // Thermal expansion coefficient [1/K]
+    Tsolidus            1658;          // Solidus temperature [K]
+    Tliquidus           1723;          // Liquidus temperature [K]
+    LatentHeat          260e3;         // Latent heat of fusion [J/kg]
+    beta                1.8e-5;        // Thermal expansion coefficient [1/K]
 
     table_kappa
     (
-        (300    14.7)
-        (500    17.6)
-        (800    22.0)
-        (1200   28.0)
-        (1500   31.5)
-        (1658   32.5)
-        (1723   30.0)
-        (1724   26.9)
-        (5000   26.9)
-        (10000  26.9)
+        (300      14.68)
+        (500      17.6)
+        (800      21.98)
+        (1200     27.82)
+        (1500     32.2)
+        (1658     34.5068)
+        (1722.999 35.4557854)
+        (1723     26.9)
+        (5000     26.9)
+        (10000    26.9)
     );
 
     table_cp
     (
-        (300    492.8)
-        (500    540.0)
-        (800    590.0)
-        (1200   650.0)
-        (1500   690.0)
-        (1658   720.0)
-        (1723   740.0)
-        (1724   770.0)
-        (5000   770.0)
-        (10000  770.0)
+        (300      492.8)
+        (500      540.8)
+        (800      612.8)
+        (1200     708.8)
+        (1500     780.8)
+        (1658     818.72)
+        (1722.999 834.31976)
+        (1723     790.0)
+        (5000     790.0)
+        (10000    790.0)
     );
-    elec_resistivity	1e-6;      // Electrical resistivity [ohm m]
+
+    elec_resistivity    1e-6;          // Electrical resistivity [ohm m]
 }
+
+
+// ------------------------------------------------------------------------- //
+// Gas: shielding atmosphere
+// ------------------------------------------------------------------------- //
 
 gas
 {
-    transportModel  Newtonian;     // Viscosity model for the gas phase
+    transportModel      Newtonian;
 
-    nu              1.48e-05;      // Kinematic viscosity [m2/s]
+    rho                 1;             // Density [kg/m3]
+    nu                  1.48e-05;      // Kinematic viscosity [m2/s]
 
-    rho             1;             // Density [kg/m3]
+    poly_kappa          (0.04 0 0 0 0 0 0 0); // Thermal conductivity [W/m/K]
+    poly_cp             (520 0 0 0 0 0 0 0);  // Specific heat [J/kg/K]
 
-    poly_kappa   (0.04 0 0 0 0 0 0 0);       // Gas thermal conductivity polynomial [W/m/K]
-    poly_cp   (520 0.0 0 0 0 0 0 0);         // Gas specific heat polynomial [J/kg/K]
-
-    Tsolidus    1.0;              // Dummy gas solidus temperature [K]
-    Tliquidus   10.0;             // Dummy gas liquidus temperature [K]
-    LatentHeat  1;                // Dummy gas latent heat [J/kg]
-    beta    4.0e-5;               // Gas thermal expansion coefficient [1/K]
+    Tsolidus            1.0;           // Dummy solidus temperature [K]
+    Tliquidus           10.0;          // Dummy liquidus temperature [K]
+    LatentHeat          1;             // Dummy latent heat [J/kg]
+    beta                4.0e-5;        // Thermal expansion coefficient [1/K]
 }
 
-emS                         0.3;       // Solid emissivity [-]
-emL                         0.3;       // Liquid emissivity [-]
-TRef                        300;        // Radiation reference/background temperature [K]
-T_ambient                   300;        // Ambient temperature for convection [K]
-h_convection                0;          // Convective heat transfer coefficient [W/m2/K]
 
-sigma            1.87;            // Surface tension [N/m]
-Marangoni_Constant	-4.9e-4;      // Stronger d(sigma)/dT test [N/m/K]
-p0	101325.0;                    // Atmospheric pressure reference [Pa]
-p_amb   101325.0;                 // Ambient chamber pressure used to choose Tvap [Pa]
-recoil_coeff 0.54;               // Recoil pressure Clausius-Clapeyron prefactor [-]
-Tvap	3122;                    // Vaporization temperature at p_amb [K]
-Tvap_atm    3122;                // Vaporization temperature at p0 [K]
-recoilPressureModel condensation; // condensation or modifiedReducedPressure
-recoilTransitionWidth       10; // Smooth recoil activation width above Tvap [K]
-Mm	0.056;                       // Molar mass [kg/mol]
-LatentHeatVap 6.336e6;            // Latent heat of vaporization [J/kg]
+// ------------------------------------------------------------------------- //
+// Radiation and convection
+// ------------------------------------------------------------------------- //
 
-LeeCoeff        1e5;              // Lee volumetric evaporation coeff [1/s] -- 1e4 for 10um mesh 
+emS                     0.3;           // Solid emissivity [-]
+emL                     0.3;           // Liquid emissivity [-]
+TRef                    300;           // Radiation reference temperature [K]
+T_ambient               300;           // Ambient temperature [K]
+h_convection            0;             // Convective heat transfer coefficient [W/m2/K]
 
-V_scan          0.9;            // Scan speed (900 mm/s)
-scanDirection   (0 0 1);        // Scanning along +Z direction
+
+// ------------------------------------------------------------------------- //
+// Surface tension and Marangoni model
+// Fe-S is the Sahoo/DebRoy/McNallan Fe-S proxy.
+// Keep capillary sigma constant; use Fe-S only for temperature-dependent
+// Marangoni slope dSigma/dT(T).
+// sulfurActivity is used as wt% style input: 0.01 ~= 100 ppm S.
+// ------------------------------------------------------------------------- //
+
+sigma                   1.87;          // Reference surface tension [N/m]
+Marangoni_Constant      -4.9e-4;       // Fallback constant dSigma/dT [N/m/K]
+variableSurfaceTension  off;           // Keep capillary sigma constant
+surfaceTensionModel     linear;        // Backwards-compatible sigma(T) model
+variableMarangoni       on;            // Use dSigma/dT(T) in Marangoni force
+MarangoniModel          FeS;           // Fe-S dSigma/dT(T)
+sulfurActivity          0.01;          // Approx. 100 ppm S
+
+
+// ------------------------------------------------------------------------- //
+// Recoil pressure and evaporation
+// ------------------------------------------------------------------------- //
+
+p0                      101325.0;      // Atmospheric pressure reference [Pa]
+p_amb                   101325.0;      // Ambient pressure [Pa]
+recoil_coeff            0.54;          // Clausius-Clapeyron prefactor [-]
+Tvap                    3122;          // Vaporization temperature at p_amb [K]
+Tvap_atm                3122;          // Vaporization temperature at p0 [K]
+recoilPressureModel     condensation;  // condensation or modifiedReducedPressure
+recoilTransitionWidth   10;            // Smooth recoil activation width [K]
+Mm                      0.056;         // Molar mass [kg/mol]
+LatentHeatVap           6.336e6;       // Latent heat of vaporization [J/kg]
+LeeCoeff                1e5;           // Lee volumetric evaporation coefficient [1/s]
+
+
+// ------------------------------------------------------------------------- //
+// Scan direction
+// ------------------------------------------------------------------------- //
+
+V_scan                  0.9;           // Scan speed [m/s]
+scanDirection           (0 0 1);       // Scanning along +Z
 
 // ************************************************************************* //

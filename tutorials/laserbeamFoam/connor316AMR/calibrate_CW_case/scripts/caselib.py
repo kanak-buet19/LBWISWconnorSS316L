@@ -89,6 +89,17 @@ def _sub_entry(text: str, key: str, value: str) -> str:
     return new
 
 
+def _set_or_insert_after(text: str, key: str, value: str, after_key: str) -> str:
+    new, count = re.subn(rf"(\b{key}\s+)[^;]+;", rf"\g<1>{value};", text, count=1)
+    if count:
+        return new
+
+    match = re.search(rf"^(\s*{re.escape(after_key)}\s+[^;]+;.*)$", text, flags=re.M)
+    if not match:
+        raise ValueError(f"entry '{key}' not found and insertion point '{after_key}' not found")
+    return text[:match.end()] + f"\n{key:<24}{value};" + text[match.end():]
+
+
 def _sub_entry_in_block(text: str, block: str, key: str, value: str) -> str:
     pattern = rf"({block}\s*\{{)(.*?)(\n\}})"
     m = re.search(pattern, text, flags=re.S)
@@ -261,6 +272,8 @@ def patch_transportProperties(path: Path, params: dict,
     t = _sub_entry(t, "elec_resistivity", g(params["elec_resistivity"]))
     t = _sub_entry(t, "sigma", g(params["sigma"]))
     t = _sub_entry(t, "Marangoni_Constant", g(params["Marangoni_Constant"]))
+    if "sulfurActivity" in params:
+        t = _set_or_insert_after(t, "sulfurActivity", g(params["sulfurActivity"]), "Marangoni_Constant")
     t = _sub_entry(t, "LatentHeatVap", g(params["LatentHeatVap"]))
     t = _sub_entry_in_block(t, "metal", "rho", g(params["rho"]))
     t = _sub_entry_in_block(t, "metal", "nu", g(params["nu"]))

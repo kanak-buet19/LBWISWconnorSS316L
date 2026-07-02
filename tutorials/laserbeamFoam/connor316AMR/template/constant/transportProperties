@@ -81,8 +81,21 @@ TRef                        300;        // Radiation reference/background temper
 T_ambient                   300;        // Ambient temperature for convection [K]
 h_convection                0;          // Convective heat transfer coefficient [W/m2/K]
 
-sigma            1.8;            // Surface tension [N/m]
-Marangoni_Constant	-4.9e-4;    // d(sigma)/dT for Marangoni force [N/m/K]
+// ------------------------------------------------------------------------- //
+// Surface tension and Marangoni model
+// Keep capillary sigma constant; use Fe-S only for temperature-dependent
+// Marangoni slope dSigma/dT(T).
+// sulfurActivity is used as wt% style input: 0.01 ~= 100 ppm S.
+// ------------------------------------------------------------------------- //
+
+sigma                   1.87;          // Reference surface tension [N/m]
+Marangoni_Constant      -4.9e-4;       // Fallback constant dSigma/dT [N/m/K]
+variableSurfaceTension  off;           // Keep capillary sigma constant
+surfaceTensionModel     linear;        // Backwards-compatible sigma(T) model
+variableMarangoni       on;            // Use dSigma/dT(T) in Marangoni force
+MarangoniModel          FeS;           // Fe-S dSigma/dT(T)
+sulfurActivity          0.01;          // Approx. 100 ppm S
+
 p0	101325.0;                    // Atmospheric pressure reference [Pa]
 p_amb   1e-3;                 // Ambient chamber pressure used to choose Tvap [Pa]
 beta_r  0.18;                    // Recoil pressure accommodation coefficient [-]

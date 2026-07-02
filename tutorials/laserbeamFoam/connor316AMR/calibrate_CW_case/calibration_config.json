@@ -35,6 +35,7 @@
     "elec_resistivity":    {"type": "scalar", "baseline": 0.95e-6,  "min": 0.95e-6,    "max": 0.95e-6,    "fixed": true, "_units": "ohm m"},
     "sigma":               {"type": "scalar", "baseline": 1.87,     "min": 1.87,       "max": 1.87,       "fixed": true, "_units": "N/m"},
     "Marangoni_Constant":  {"type": "scalar", "baseline": -4.9e-4,  "min": -4.9e-4,    "max": -4.9e-4,    "fixed": true, "_units": "N/m/K"},
+    "sulfurActivity":      {"type": "scalar", "baseline": 0.01,     "min": 0.01,       "max": 0.01,       "fixed": true, "_units": "-"},
     "LatentHeatVap":       {"type": "scalar", "baseline": 6.336e6,  "min": 6.336e6,    "max": 6.336e6,    "fixed": true, "_units": "J/kg"}
   },
 
@@ -92,8 +93,8 @@
   },
 
   "execution": {
-    "coresPerSim": 8,
-    "totalCores": 36,
+    "coresPerSim": 4,
+    "totalCores": 16,
     "pollIntervalSec": 10,
     "perSimStallSec": 1800,
     "perSimStartupSec": 3600,

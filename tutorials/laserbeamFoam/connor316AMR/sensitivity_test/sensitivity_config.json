@@ -35,12 +35,12 @@
         "path": "sigma"
       },
       {
-        "name": "marangoni_constant",
-        "label": "Marangoni dSigma/dT",
-        "unit": "N/m/K",
+        "name": "sulfur_activity",
+        "label": "Sulfur activity for Fe-S Marangoni",
+        "unit": "-",
         "operation": "scale_scalar",
         "file": "constant/transportProperties",
-        "path": "Marangoni_Constant"
+        "path": "sulfurActivity"
       },
       {
         "name": "kinematic_viscosity_nu",

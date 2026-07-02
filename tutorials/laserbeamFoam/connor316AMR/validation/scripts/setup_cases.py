@@ -40,6 +40,21 @@ def replace_regex_optional(path: Path, pattern: str, repl: str) -> None:
         write_text(path, new_text)
 
 
+def replace_regex_in_block(path: Path, block: str, pattern: str, repl: str) -> None:
+    text = read_text(path)
+    block_pattern = rf"({block}\s*\{{)(.*?)(\n\}})"
+    match = re.search(block_pattern, text, flags=re.DOTALL)
+    if not match:
+        raise RuntimeError(f"block not found in {path}: {block}")
+
+    body, count = re.subn(pattern, repl, match.group(2), count=1, flags=re.MULTILINE)
+    if count == 0:
+        raise RuntimeError(f"pattern not found in {path} block {block}: {pattern}")
+
+    new_text = text[:match.start()] + match.group(1) + body + match.group(3) + text[match.end():]
+    write_text(path, new_text)
+
+
 def fmt_m(value: float) -> str:
     return f"{value:.6e}"
 
@@ -102,14 +117,14 @@ def set_shielding_gas(case_dir: Path, gas: str) -> None:
     if props is None:
         raise RuntimeError(f"Unknown shielding_gas: {gas!r}. Choose from {list(_GAS_PROPS)}")
     tp = case_dir / "constant" / "transportProperties"
-    replace_regex(tp,
-        r"^(\s*nu\s+)[-+0-9.eE]+(\s*;.*// Gas kinematic viscosity.*)$",
+    replace_regex_in_block(tp, "gas",
+        r"^(\s*nu\s+)[-+0-9.eE]+(\s*;.*)$",
         rf"\g<1>{props['nu']:.2e}\2")
-    replace_regex(tp,
-        r"^(\s*poly_kappa\s+)\([^)]+\)(\s*;.*// Gas thermal conductivity.*)$",
+    replace_regex_in_block(tp, "gas",
+        r"^(\s*poly_kappa\s+)\([^)]+\)(\s*;.*)$",
         rf"\g<1>({props['kappa']} 0 0 0 0 0 0 0)\2")
-    replace_regex(tp,
-        r"^(\s*poly_cp\s+)\([^)]+\)(\s*;.*// Gas specific heat.*)$",
+    replace_regex_in_block(tp, "gas",
+        r"^(\s*poly_cp\s+)\([^)]+\)(\s*;.*)$",
         rf"\g<1>({props['cp']} 0.0 0 0 0 0 0 0)\2")
 
 

@@ -23,7 +23,7 @@ nHatM = gradAlpha/(mag(gradAlpha) + deltaN);
 nHatM.correctBoundaryConditions();  // ADDED
 
 Marangoni =
-    epsilon1*Marangoni_Constant*(gradT - nHatM*(nHatM & gradT))*mag(gradAlpha);
+    epsilon1*dSigmaDtf*(gradT - nHatM*(nHatM & gradT))*mag(gradAlpha);
 
 const scalar Tliquidus1Value = Tliquidus1.value();
 const scalarField& TI = T;
