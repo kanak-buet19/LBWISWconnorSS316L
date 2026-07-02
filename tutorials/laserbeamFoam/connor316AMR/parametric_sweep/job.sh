@@ -2,7 +2,7 @@
 #SBATCH --job-name=paramSweep
 #SBATCH --time=48:00:00
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=32
+#SBATCH --ntasks-per-node=16
 #SBATCH --account=mch250110
 #SBATCH --output=param_sweep_%j.out
 #SBATCH --error=param_sweep_%j.err
@@ -13,7 +13,7 @@
 #   sbatch job.sh
 #
 # Override sizing:
-#   sbatch --ntasks-per-node=40 --export=ALL,PARAM_CORES_PER_SIM=8 job.sh
+#   sbatch --ntasks-per-node=16 --export=ALL,PARAM_CORES_PER_SIM=4 job.sh
 #
 # Dry run:
 #   sbatch --export=ALL,DRY_RUN=1 job.sh
@@ -42,8 +42,8 @@ caseDir="$(pwd)"
 export OF2506_IMAGE="${OF2506_IMAGE:-$HOME/openfoam-dev_2506.sif}"
 export OF2506_USER="${OF2506_USER:-x-rkanak1}"
 export PYTHON="${PYTHON:-/home/x-rkanak1/.conda/envs/isw_env/bin/python3}"
-export PARAM_TOTAL_CORES="${PARAM_TOTAL_CORES:-${SLURM_NTASKS:-32}}"
-export PARAM_CORES_PER_SIM="${PARAM_CORES_PER_SIM:-8}"
+export PARAM_TOTAL_CORES="${PARAM_TOTAL_CORES:-${SLURM_NTASKS:-16}}"
+export PARAM_CORES_PER_SIM="${PARAM_CORES_PER_SIM:-4}"
 export FOAM_SIGFPE=0
 export MPLCONFIGDIR="$caseDir/.mplconfig"
 mkdir -p "$MPLCONFIGDIR"

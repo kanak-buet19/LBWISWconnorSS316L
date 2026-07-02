@@ -303,6 +303,14 @@ def start_case(
     return process, log_handle
 
 
+def log_tail(path: Path, n_lines: int = 80) -> str:
+    try:
+        lines = path.read_text(errors="replace").splitlines()
+    except OSError as exc:
+        return f"(could not read {path}: {exc})"
+    return "\n".join(lines[-n_lines:]) if lines else "(log is empty)"
+
+
 def status_text(row: dict[str, Any]) -> str:
     case_dir = ROOT / row["case_dir"]
     progress = sim_progress(case_dir)
@@ -379,6 +387,11 @@ def run_parallel_cases(
             write_summary(results_root, completed)
             write_dashboard()
             print(f"[{status}] {row['case_id']} return_code={return_code}", flush=True)
+            if status == "failed":
+                log_path = run_logs / f"{row['case_id']}.log"
+                print(f"--- tail {log_path} ---", flush=True)
+                print(log_tail(log_path), flush=True)
+                print("--- end tail ---", flush=True)
 
             while pending and len(running) < slots:
                 launch_next()

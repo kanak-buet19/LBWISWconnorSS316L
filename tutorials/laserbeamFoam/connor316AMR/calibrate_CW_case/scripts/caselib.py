@@ -83,14 +83,14 @@ def build_geometry(case: dict, geom: dict, control: dict) -> dict:
 # Dictionary patchers
 # --------------------------------------------------------------------------- #
 def _sub_entry(text: str, key: str, value: str) -> str:
-    new, k = re.subn(rf"(\b{key}\s+)[^;]+;", rf"\g<1>{value};", text, count=1)
+    new, k = re.subn(rf"(^\s*{re.escape(key)}\s+)[^;]+;", rf"\g<1>{value};", text, count=1, flags=re.M)
     if k == 0:
         raise ValueError(f"entry '{key}' not found")
     return new
 
 
 def _set_or_insert_after(text: str, key: str, value: str, after_key: str) -> str:
-    new, count = re.subn(rf"(\b{key}\s+)[^;]+;", rf"\g<1>{value};", text, count=1)
+    new, count = re.subn(rf"(^\s*{re.escape(key)}\s+)[^;]+;", rf"\g<1>{value};", text, count=1, flags=re.M)
     if count:
         return new
 
@@ -98,6 +98,15 @@ def _set_or_insert_after(text: str, key: str, value: str, after_key: str) -> str
     if not match:
         raise ValueError(f"entry '{key}' not found and insertion point '{after_key}' not found")
     return text[:match.end()] + f"\n{key:<24}{value};" + text[match.end():]
+
+
+def _require_top_level_entries(text: str, path: Path, keys: tuple[str, ...]) -> None:
+    missing = [
+        key for key in keys
+        if not re.search(rf"^\s*{re.escape(key)}\s+[^;]+;", text, flags=re.M)
+    ]
+    if missing:
+        raise ValueError(f"{path}: missing top-level transportProperties entries: {', '.join(missing)}")
 
 
 def _sub_entry_in_block(text: str, block: str, key: str, value: str) -> str:
@@ -299,6 +308,21 @@ def patch_transportProperties(path: Path, params: dict,
 
     # -- case-specific scan speed -------------------------------------------
     t = _sub_entry(t, "V_scan", g(v_scan_mm_s / 1000.0))
+
+    _require_top_level_entries
+    (
+        t,
+        path,
+        (
+            "sigma",
+            "Marangoni_Constant",
+            "variableSurfaceTension",
+            "surfaceTensionModel",
+            "variableMarangoni",
+            "MarangoniModel",
+            "sulfurActivity",
+        ),
+    )
 
     path.write_text(t)
 
