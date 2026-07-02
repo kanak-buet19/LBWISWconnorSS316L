@@ -1,0 +1,105 @@
+{
+  "_comment": "Testing calibration: short Hofmann 316L 200 W, 1200 mm/s, r=25 um case. Domain is trimmed to the 0.480427 ms laser position.",
+
+  "objective": {
+    "_comment": "Case error = weighted mean absolute relative error over depth, width, and aspect ratio. Aspect ratio is weighted higher to prioritize melt-pool shape.",
+    "metric": "mean_abs_rel_error_with_ar",
+    "depth_weight": 1.0,
+    "width_weight": 1.0,
+    "aspect_ratio_weight": 3.0
+  },
+
+  "mesh_phases": {
+    "enabled": false,
+    "maxRefinement": 2,
+    "_comment": "Short testing calibration: 40 um base with 2-level AMR -> 10 um finest cells."
+  },
+
+  "optimizer": {
+    "method": "bo_tpe",
+    "nSamples": 16,
+    "initSamples": 8,
+    "seed": 42,
+    "_comment": "Bayesian optimization (Optuna TPE): 8 exploration sims, then 8 optimization sims."
+  },
+
+  "parameters": {
+    "_comment": "Only three active knobs: solid thermal conductivity scale, solid specific heat scale, and electrical resistivity. Liquid properties and all other physics parameters are fixed.",
+    "nu":                       {"type": "scalar", "baseline": 1.16262171e-6, "min": 1.16262171e-6, "max": 1.16262171e-6, "fixed": true, "_units": "m2/s"},
+    "rho":                      {"type": "scalar", "baseline": 6881.0,       "min": 6881.0,        "max": 6881.0,        "fixed": true, "_units": "kg/m3"},
+    "table_kappa_solid_scale":  {"type": "scale",  "baseline": 1.0,          "min": 0.80,          "max": 1.20,          "_units": "-"},
+    "table_kappa_liquid_scale": {"type": "scale",  "baseline": 1.0,          "min": 1.0,           "max": 1.0,           "fixed": true, "_units": "-"},
+    "table_cp_solid_scale":     {"type": "scale",  "baseline": 1.0,          "min": 0.80,          "max": 1.20,          "_units": "-"},
+    "table_cp_liquid_scale":    {"type": "scale",  "baseline": 1.0,          "min": 1.0,           "max": 1.0,           "fixed": true, "_units": "-"},
+    "LatentHeat":               {"type": "scalar", "baseline": 260e3,        "min": 260e3,         "max": 260e3,         "fixed": true, "_units": "J/kg"},
+    "elec_resistivity":         {"type": "scalar", "baseline": 0.95e-6,      "min": 0.76e-6,       "max": 1.14e-6,       "_units": "ohm m"},
+    "sigma":                    {"type": "scalar", "baseline": 1.87,         "min": 1.87,          "max": 1.87,          "fixed": true, "_units": "N/m"},
+    "Marangoni_Constant":       {"type": "scalar", "baseline": -4.9e-4,      "min": -4.9e-4,       "max": -4.9e-4,       "fixed": true, "_units": "N/m/K"},
+    "sulfurActivity":           {"type": "scalar", "baseline": 0.01,         "min": 0.01,          "max": 0.01,          "fixed": true, "_units": "-"},
+    "LatentHeatVap":            {"type": "scalar", "baseline": 6.336e6,      "min": 6.336e6,       "max": 6.336e6,       "fixed": true, "_units": "J/kg"}
+  },
+
+  "geometry": {
+    "base_cell": 40e-6,
+    "gas_thickness": 120e-6,
+    "x_extent": 512e-6,
+    "lead_in": 100e-6,
+    "tail": 100e-6,
+    "substrate_depth_factor": 1.5,
+    "substrate_min": 240e-6,
+    "surface_y_um": 120.0
+  },
+
+  "control": {
+    "endTime": 4.804273426e-4,
+    "writeInterval": 1e-5,
+    "deltaT": 1e-7,
+    "maxDeltaT": 1e-6,
+    "maxCo": 0.75,
+    "maxAlphaCo": 0.75
+  },
+
+  "cases": [
+    {
+      "name": "hofmann_scantrack_200W_1200mms_r25um_short480us",
+      "P_laser_W": 200,
+      "v_scan_mm_s": 1200,
+      "laserRadius_m": 25e-6,
+      "laser_start_z_m": 0.000100,
+      "laser_end_z_m": 0.0006765305505,
+      "laser_off_time_s": 4.804273426e-4,
+      "end_time_s": 4.804273426e-4,
+      "exp_width_um": 94.69,
+      "exp_depth_um": 73.76
+    }
+  ],
+
+  "earlyAbort": {
+    "enabled": false,
+    "errorThreshold": 0.45,
+    "stabilityTol": 0.10,
+    "minPoints": 3,
+    "skipSecondCaseIfFirstBad": false,
+    "_comment": "Disabled because in-run melt-pool/final-section files are provisional. Score only after the solver exits."
+  },
+
+  "cleanup": {
+    "enabled": true,
+    "_comment": "Keep full heavy data only for the current best valid candidate. Other completed candidates keep CSV, logs, case_build.json, result.json, and case_info.json."
+  },
+
+  "longTrackValidation": {
+    "enabled": false
+  },
+
+  "execution": {
+    "coresPerSim": 4,
+    "totalCores": 32,
+    "pollIntervalSec": 10,
+    "perSimStallSec": 1800,
+    "perSimStartupSec": 3600,
+    "minDeltaTAbort": 0,
+    "minDeltaTConsecutivePolls": 5,
+    "lowDeltaTPenalty": 1.0
+  }
+}

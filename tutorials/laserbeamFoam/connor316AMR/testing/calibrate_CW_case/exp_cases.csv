@@ -1,0 +1,2 @@
+case_no,regime,power_W,speed_mm_s,beam_radius_um,exp_width_um,exp_depth_um
+1,conduction,200,1200,25,94.69,73.76
