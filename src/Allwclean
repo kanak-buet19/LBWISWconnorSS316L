@@ -1,0 +1,10 @@
+#!/bin/bash
+cd "${0%/*}" || exit  # Run from this directory
+
+wclean geometricVoF
+wclean laserHeatSource
+wclean MTHD
+wclean transportModels/incompressible
+wclean turbulenceModel
+
+#------------------------------------------------------------------------------
