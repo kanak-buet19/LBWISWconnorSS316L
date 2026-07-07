@@ -1331,3 +1331,86 @@ volScalarField CR_temporal
     mesh,
     dimensionedScalar("CR_temporal", dimensionSet(0, 0, -1, 1, 0), 0.0)
 );
+
+// ============ Melt-pool / bead geometry monitoring ============
+// Multi-probe, quasi-steady-aware measurement of the paper's geometry
+// (melt-pool 0.5W and D; clad 0.5W, h, D). See updatePoolMetrics.H.
+
+// Persistent monotonic "was-ever-molten" flag = the paper's indication
+// parameter (Section 2.3): once a metal cell reaches solidus it stays
+// flagged. The fused zone's bounding box gives the final clad geometry.
+volScalarField fusedFlag
+(
+    IOobject
+    (
+        "fusedFlag",
+        runTime.timeName(),
+        mesh,
+        IOobject::READ_IF_PRESENT,
+        IOobject::AUTO_WRITE
+    ),
+    mesh,
+    dimensionedScalar("fusedFlag", dimless, 0.0)
+);
+
+const Switch enablePoolMetrics
+(
+    DEDProperties.lookupOrDefault<Switch>("enablePoolMetrics", true)
+);
+
+// Probe placement: nProbes evenly spaced y-z slabs between probeXStart and
+// probeXEnd (defaults skip the ~15% start/end transient margins of the
+// case2C track x = 3.67..20.33 mm). Each slab is |x - probeX| <= probeBandHalf.
+const label nProbes
+(
+    DEDProperties.lookupOrDefault<label>("nProbes", 7)
+);
+const scalar probeXStart
+(
+    DEDProperties.lookupOrDefault<scalar>("probeXStart", 0.006)
+);
+const scalar probeXEnd
+(
+    DEDProperties.lookupOrDefault<scalar>("probeXEnd", 0.018)
+);
+const scalar probeBandHalf
+(
+    DEDProperties.lookupOrDefault<scalar>("probeBandHalf", 5e-4)
+);
+// Original (undeformed) substrate top surface, y increases downward.
+const scalar substrateSurfaceY
+(
+    DEDProperties.lookupOrDefault<scalar>("substrateSurfaceY", 0.007)
+);
+// Coefficient-of-variation across interior probes below which the geometry
+// is declared quasi-steady (translational invariance reached).
+const scalar steadyCoVThreshold
+(
+    DEDProperties.lookupOrDefault<scalar>("steadyCoVThreshold", 0.05)
+);
+// How many probes at each end to treat as transient (excluded from the
+// steady mean/std). 1 => drop first and last probe.
+const label interiorProbeMargin
+(
+    DEDProperties.lookupOrDefault<label>("interiorProbeMargin", 1)
+);
+
+scalarList probeX(nProbes, 0.0);
+forAll(probeX, i)
+{
+    probeX[i] =
+        (nProbes > 1)
+      ? probeXStart + (probeXEnd - probeXStart)*scalar(i)/scalar(nProbes - 1)
+      : 0.5*(probeXStart + probeXEnd);
+}
+
+// Persistent per-probe running metrics (all running maxima). Pool metrics
+// peak as the beam crosses each probe; clad metrics are monotonic (fused
+// zone only grows) so their running max is the final value.
+scalarList peakPoolDepth(nProbes, 0.0);      // max_y(liquid) - surfaceY
+scalarList peakPoolHalfWidth(nProbes, 0.0);  // 0.5 * z-span(liquid)
+scalarList cladDepth(nProbes, 0.0);          // max_y(fused) - surfaceY
+scalarList cladHeight(nProbes, 0.0);         // surfaceY - min_y(fused)
+scalarList cladHalfWidth(nProbes, 0.0);      // 0.5 * z-span(fused)
+scalarList beadMetalHeight(nProbes, 0.0);    // surfaceY - min_y(metal alpha>0.5)
+// ============ end melt-pool / bead geometry monitoring ============

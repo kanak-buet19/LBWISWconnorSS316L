@@ -1,0 +1,51 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     |                                                 |
+|   \\  /    A nd           |                                                 |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "constant";
+    object      DEDProperties;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Wire directed-energy-deposition feed (Strategy A: Eulerian volumetric
+// source), mass-rate-matched to Zhang et al. 2021 Case 2C powder feed
+// (10 g/min = 1.6667e-4 kg/s). Zhang used coaxial powder, not wire - no
+// wire diameter given in the paper, so wireDiameter=1mm is assumed (typical
+// DED wire size) and wireFeedSpeed solved to hit the same mass rate.
+// mdot = rho1 * (pi*wireDiameter^2/4) * wireFeedSpeed
+//      = 6881 * (pi*(1e-3)^2/4) * 0.030843 = 1.6667e-4 kg/s
+
+wireDiameter        1e-3;        // [m] feedstock wire diameter (assumed)
+wireFeedSpeed       0.030843;    // [m/s] wire feed speed (sets mass rate = 10 g/min)
+
+// Velocity given to the injected feedstock (direction + speed). Here +y is
+// into the substrate (y increases downward in this case) - wire pushed
+// gently down into the melt pool. Scaled from singleTrack tutorial's
+// feedVelocity/wireFeedSpeed ratio (0.25).
+feedVelocity        (0 0.007711 0); // [m/s]
+
+// HOT wire: injected metal arrives molten (above liquidus 1723 K) so it
+// merges into the melt pool and surface tension consolidates it into a bead,
+// instead of sitting as a cold diffuse cloud in the gas.
+feedTemperature     2000;       // [K] molten feedstock
+feedCp              790;        // [J/(kg K)] feedstock specific heat (matches metal liquid cp)
+
+// Feed region: sphere of this radius centred on the laser scan point plus
+// feedCentreOffset. Offset places the sphere ON the surface (laser sits
+// 0.5mm above the surface at y=0.5mm; surface is at y=1.0mm) so the wire
+// feeds directly into the pool, straddling the gas/metal interface.
+feedRadius          1.07e-3;      // [m] scaled from laserRadius (0.714 x 1.5mm)
+feedCentreOffset    (0 5e-4 0);   // [m] relative to laser position
+
+feedStartTime       0;          // [s]
+// feedEndTime      GREAT;      // [s] (default: always on)
+
+// ************************************************************************* //

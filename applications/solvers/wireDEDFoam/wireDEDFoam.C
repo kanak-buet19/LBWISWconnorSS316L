@@ -418,6 +418,9 @@ int main(int argc, char *argv[])
             Info << "[DEBUG-Solidification] No active melt pool found. Skipping CSV log." << endl;
         }
 
+        // Wire-DED: multi-probe melt-pool / bead geometry measurement.
+        #include "updatePoolMetrics.H"
+
         Info<< "TMax = " << gMax(T.primitiveField())
             << ", pVapMax = " << gMax(pVap.primitiveField()) << endl;
 

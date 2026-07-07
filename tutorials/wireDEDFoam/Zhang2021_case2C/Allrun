@@ -1,0 +1,22 @@
+#!/bin/bash
+cd "${0%/*}" || exit
+. "$WM_PROJECT_DIR/bin/tools/RunFunctions"
+
+nCores=$(foamDictionary -entry numberOfSubdomains -value system/decomposeParDict)
+
+echo "Copying 'initial' to 0"
+cp -r initial 0
+find 0 -name "*.orig" -exec bash -c 'cp "$0" "${0%.orig}"' {} \;
+
+# Live output + log via tee
+blockMesh 2>&1 | tee log.blockMesh
+setFields 2>&1 | tee log.setFields
+decomposePar 2>&1 | tee log.decomposePar
+
+mpirun -np "$nCores" wireDEDFoam -parallel 2>&1 | tee log.wireDEDFoam
+
+# Dynamic (AMR) mesh: reconstruct + convert to legacy VTK properly.
+# (plain reconstructPar mishandles per-time topology changes)
+./foamToVTK.sh
+
+touch Zhang2021_case2C.foam
