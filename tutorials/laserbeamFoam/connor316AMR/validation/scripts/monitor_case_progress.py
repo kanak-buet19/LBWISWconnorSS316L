@@ -12,6 +12,7 @@ from pathlib import Path
 
 from rich.console import Console
 from rich.live import Live
+from rich.markup import escape
 from rich.progress import BarColumn, Progress, TextColumn
 from rich.table import Table
 
@@ -43,7 +44,9 @@ class CaseState:
 def short_label(name: str) -> str:
     match = re.search(r"hofmann_scantrack_(\d+)W_(\d+)mms", name)
     if match:
-        return f"{match.group(1)}W {match.group(2)}mm/s"
+        rest = name[match.end():].lstrip("_")
+        label = f"{match.group(1)}W {match.group(2)}mm/s"
+        return f"{label} [{rest}]" if rest else label
     return name
 
 
@@ -144,7 +147,8 @@ def render(states: list[CaseState], cores: int) -> Table:
         title=f"Parallel validation batch - {len(states)} case(s), {cores} cores each",
         expand=True,
     )
-    table.add_column("Case", no_wrap=True)
+    case_width = max((len(short_label(s.name)) for s in states), default=20)
+    table.add_column("Case", no_wrap=True, min_width=case_width)
     table.add_column("Progress", justify="center")
     table.add_column("Time", justify="right")
     table.add_column("dt", justify="right")
@@ -168,7 +172,7 @@ def render(states: list[CaseState], cores: int) -> Table:
             "failed": "red",
         }.get(status, "white")
         table.add_row(
-            short_label(state.name),
+            escape(short_label(state.name)),
             progress_bar(percent),
             f"{state.time_s * 1e3:.3f}/{state.end_time_s * 1e3:.3f} ms",
             f"{state.dt_s:.2e}" if state.dt_s > 0 else "-",
