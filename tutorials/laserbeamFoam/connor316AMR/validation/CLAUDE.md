@@ -27,8 +27,8 @@ python3 scripts/setup_cases.py --rebuild --case <name>
 
 # Post-process a specific VTU manually
 python3 template_case/scripts/analyze_meltpool_vtu.py \
-    --case cases/<name> \
-    --vtk-file cases/<name>/VTK/<time>/internal.vtu
+    --case runs/<name> \
+    --vtk-file runs/<name>/VTK/<time>/internal.vtu
 ```
 
 `Allrun` calls `setup_cases.py` to prepare/sync the case directory, then runs `Allclean_long` + `Allrun` inside each case dir.
@@ -51,7 +51,7 @@ python3 template_case/scripts/analyze_meltpool_vtu.py \
 
 | Key | Required | Notes |
 |---|---|---|
-| `name` | yes | Directory name under `cases/` |
+| `name` | yes | Directory name under `runs/` |
 | `material` | yes | Must match a dir under `materials/` (`SS316L` or `Ti64`) |
 | `enabled` | no | Defaults to `true` |
 | `power_W` | yes | Laser power |
@@ -106,4 +106,4 @@ Metrics measured from `alpha.metal = 0.5` contour (keyhole boundary) and `T = Ts
 
 - `setup_cases.py` uses regex-replace on known pattern anchors in OpenFOAM files. If you rename a comment header or parameter line in the template, the corresponding `replace_regex` call in `configure_case` will raise `RuntimeError: pattern not found`.
 - `timeVsLaserPosition` and `timeVsLaserPower` are always fully regenerated (not patched) from `cases.json` values.
-- Cases under `cases/` are generated artifacts. Only commit them if results need to be preserved; otherwise they can be regenerated with `--setup-only`.
+- Cases under `runs/` are generated artifacts. Only commit them if results need to be preserved; otherwise they can be regenerated with `--setup-only`.

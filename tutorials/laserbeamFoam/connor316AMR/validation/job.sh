@@ -172,8 +172,8 @@ if [ "$totalCases" -eq 0 ]; then
     exit 0
 fi
 
-# One batch folder per job submission: cases/case_NNN_<date>_<time>/, holding
-# every selected case as cases/<batchName>/<caseName>/ (built directly via
+# One batch folder per job submission: runs/case_NNN_<date>_<time>/, holding
+# every selected case as runs/<batchName>/<caseName>/ (built directly via
 # --dest-root, no separate staging copy). NNN is a global counter shared with
 # validation/Allrun, so local runs and sbatch submissions never collide.
 runTimestamp="$(date +%Y%m%d_%H%M%S)"
@@ -182,7 +182,7 @@ nextBatchName()
 {
     local maxN=0
     local n
-    for d in cases/case_[0-9][0-9][0-9]_*; do
+    for d in runs/case_[0-9][0-9][0-9]_*; do
         [ -d "$d" ] || continue
         n="$(basename "$d" | sed -n 's/^case_\([0-9]\{3\}\)_.*/\1/p')"
         [ -n "$n" ] || continue
@@ -195,8 +195,8 @@ nextBatchName()
 }
 
 batchName="$(nextBatchName)"
-echo "Preparing validation cases into cases/${batchName}/ ..."
-"$PYTHON" scripts/setup_cases.py --dest-root "cases/${batchName}" "${setupArgs[@]}"
+echo "Preparing validation cases into runs/${batchName}/ ..."
+"$PYTHON" scripts/setup_cases.py --dest-root "runs/${batchName}" "${setupArgs[@]}"
 
 if [ "$totalCores" -lt 1 ]; then
     echo "ERROR: total core count must be positive, got $totalCores" >&2
@@ -216,7 +216,7 @@ if [ "$parallelCases" -gt "$totalCases" ]; then
 fi
 
 echo "=== Run Plan ==="
-echo "Batch folder:       cases/${batchName}"
+echo "Batch folder:       runs/${batchName}"
 echo "Selected cases:     $totalCases"
 echo "Cores per case:     $coresPerCase"
 echo "Parallel case slots: $parallelCases"
@@ -227,7 +227,7 @@ set_case_cores()
 {
     local caseName="$1"
     local cores="$2"
-    local dict="cases/${batchName}/${caseName}/system/decomposeParDict"
+    local dict="runs/${batchName}/${caseName}/system/decomposeParDict"
 
     "$PYTHON" - "$dict" "$cores" <<'PY'
 import re
@@ -254,7 +254,7 @@ run_case()
 {
     local caseName="$1"
     local cores="$2"
-    local caseDir="$suiteDir/cases/${batchName}/${caseName}"
+    local caseDir="$suiteDir/runs/${batchName}/${caseName}"
 
     set_case_cores "$caseName" "$cores"
     echo "[$(date)] START $caseName (${cores} cores)"
@@ -288,8 +288,8 @@ run_wave()
         caseName="${caseNames[$((startIndex + i))]}"
         names+=("$caseName")
         monitorArgs+=(--case "${batchName}/${caseName}")
-        echo "  -> $caseName (log: cases/${batchName}/$caseName/log.validationJob)"
-        run_case "$caseName" "$coresPerCase" > "cases/${batchName}/$caseName/log.validationJob" 2>&1 &
+        echo "  -> $caseName (log: runs/${batchName}/$caseName/log.validationJob)"
+        run_case "$caseName" "$coresPerCase" > "runs/${batchName}/$caseName/log.validationJob" 2>&1 &
         pids+=("$!")
     done
 
@@ -316,7 +316,7 @@ run_wave()
         if [ "${results[$i]}" -eq 0 ]; then
             echo "  OK: ${names[$i]}"
         else
-            echo "  FAILED: ${names[$i]} (see cases/${batchName}/${names[$i]}/log.validationJob)" >&2
+            echo "  FAILED: ${names[$i]} (see runs/${batchName}/${names[$i]}/log.validationJob)" >&2
         fi
     done
 

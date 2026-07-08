@@ -187,7 +187,7 @@ def render(states: list[CaseState], cores: int) -> Table:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--case", action="append", required=True, help="Case name under cases/")
+    parser.add_argument("--case", action="append", required=True, help="Case name under runs/")
     parser.add_argument("--cores", type=int, required=True)
     parser.add_argument("--interval", type=float, default=2.0)
     args = parser.parse_args()
@@ -195,14 +195,14 @@ def main() -> None:
     signal.signal(signal.SIGINT, stop_dashboard)
 
     states = [
-        CaseState(name=name, end_time_s=parse_end_time(ROOT / "cases" / name))
+        CaseState(name=name, end_time_s=parse_end_time(ROOT / "runs" / name))
         for name in args.case
     ]
     console = Console()
     with Live(render(states, args.cores), console=console, refresh_per_second=4, transient=False) as live:
         while RUNNING:
             for state in states:
-                update_state(state, ROOT / "cases" / state.name)
+                update_state(state, ROOT / "runs" / state.name)
             live.update(render(states, args.cores))
             time.sleep(args.interval)
 

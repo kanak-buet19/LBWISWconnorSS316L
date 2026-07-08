@@ -38,7 +38,7 @@ python template/scripts/analyze_meltpool_vtu.py --vtk-file VTK/.../internal.vtu
 |------|---------|
 | `template/` | Master OpenFOAM case; source for copying to new studies |
 | `calibrate_CW_case/` | Bayesian optimization workflow (see its CLAUDE.md for full detail) |
-| `validation/` | Standalone validation runs; `cases/` holds per-experiment sub-dirs, `cases.json` controls which run |
+| `validation/` | Standalone validation runs; `runs/` holds per-experiment sub-dirs, `cases.json` controls which run |
 | `validation/template_case` | Base SS316L template for CW Hofmann validation |
 | `validation/template_Ti64` | Base Ti-6Al-4V template for Wang validation |
 | `backups/` | Ad-hoc snapshots; not tracked by calibration |

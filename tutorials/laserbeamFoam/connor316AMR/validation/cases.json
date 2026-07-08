@@ -1,6 +1,6 @@
 {
   "template": "template_case",
-  "cases_dir": "cases",
+  "cases_dir": "runs",
   "write_interval_s": 1e-5,
   "base_mesh_size_um": 40,
   "amr_levels": 2,

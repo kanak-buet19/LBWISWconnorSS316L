@@ -16,7 +16,7 @@ from scipy.interpolate import griddata
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CASES_DIR = ROOT / "cases"
+CASES_DIR = ROOT / "runs"
 OUT_PNG = ROOT / "post-processing-data" / "hofmann_combined_summary.png"
 OUT_PDF = ROOT / "post-processing-data" / "hofmann_combined_summary.pdf"
 HOFMANN_CASES = [
