@@ -1,8 +1,8 @@
 #!/bin/bash
 #SBATCH --job-name=validationAMR
-#SBATCH --time=24:00:00
+#SBATCH --time=48:00:00
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=64
+#SBATCH --ntasks-per-node=36
 #SBATCH --account=mch250110
 #SBATCH --output=validation_%j.out
 #SBATCH --error=validation_%j.err
