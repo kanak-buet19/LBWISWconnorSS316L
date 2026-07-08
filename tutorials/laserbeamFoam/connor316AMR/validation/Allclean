@@ -5,21 +5,77 @@ set -e
 suiteDir="$(cd "$(dirname "$0")" && pwd)"
 cd "$suiteDir"
 
-for caseDir in cases/*; do
-    [ -d "$caseDir" ] || continue
+clean_dir()
+{
+    local caseDir="$1"
     echo "===== Cleaning $(basename "$caseDir") ====="
-    (
-        cd "$caseDir"
-        if [ -x ./Allclean_long ]; then
-            ./Allclean_long
-        else
-            echo "Skipping case-local clean; Allclean_long is missing"
-        fi
-    )
-done
+    if [ -x "$caseDir/Allclean_long" ]; then
+        ( cd "$caseDir" && ./Allclean_long )
+    fi
+    rm -rf "$caseDir"
+}
 
-echo "Removing generated case folders"
-rm -rf cases
+if [ "$#" -gt 0 ] && [ "$1" = "--all" ]; then
+    for caseDir in cases/*; do
+        [ -d "$caseDir" ] || continue
+        clean_dir "$caseDir"
+    done
+    echo "Removing Slurm output files"
+    rm -f validation_*.out validation_*.err slurm-*.out
+    exit 0
+fi
+
+mapfile -t existing < <(find cases -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | sort)
+
+if [ "${#existing[@]}" -eq 0 ]; then
+    echo "No run folders under cases/."
+    exit 0
+fi
+
+caseLabel()
+{
+    local name="$1"
+    # Batch folders (case_NNN_<date>_<time>/) hold real case-named subfolders;
+    # show those so you know what's actually inside before deleting.
+    if [[ "$name" =~ ^case_[0-9]{3}_ ]]; then
+        find "cases/${name}" -mindepth 1 -maxdepth 1 -type d -printf '%f, ' 2>/dev/null | sed 's/, $//'
+    fi
+}
+
+echo "Select batch/case folder(s) to clean:"
+echo "  0) all"
+i=1
+for name in "${existing[@]}"; do
+    label="$(caseLabel "$name")"
+    if [ -n "$label" ]; then
+        echo "  ${i}) ${name}  [${label}]"
+    else
+        echo "  ${i}) ${name}"
+    fi
+    i=$((i + 1))
+done
+printf "choice [0-%d] (space/comma separated ok): " "${#existing[@]}"
+read -r choice
+choice="${choice//,/ }"
+
+if [ -z "$choice" ]; then
+    echo "No selection, nothing cleaned."
+    exit 0
+fi
+
+for item in $choice; do
+    if [ "$item" = "0" ] || [ "$item" = "all" ]; then
+        for name in "${existing[@]}"; do
+            clean_dir "cases/${name}"
+        done
+        break
+    elif [[ "$item" =~ ^[0-9]+$ ]] && [ "$item" -ge 1 ] && [ "$item" -le "${#existing[@]}" ]; then
+        clean_dir "cases/${existing[$((item - 1))]}"
+    else
+        echo "Invalid choice: $item" >&2
+        exit 2
+    fi
+done
 
 echo "Removing Slurm output files"
 rm -f validation_*.out validation_*.err slurm-*.out

@@ -59,10 +59,10 @@ if [ "$maxCoresPerCase" -lt 1 ]; then
 fi
 
 DEFAULT_HOFMANN_CASES=(
-    hofmann_scantrack_200W_900mms_r25um
-    hofmann_scantrack_200W_1200mms_r25um
-    hofmann_scantrack_200W_1500mms_r25um
     hofmann_scantrack_250W_600mms_r25um
+    hofmann_scantrack_250W_600mms_r25um_mehrdad
+    riffel_pulsed_1050W_10Hz_191um
+    riffel_pulsed_1050W_10Hz_191um_template_case
 )
 
 setupArgs=("$@")
@@ -164,8 +164,6 @@ PY
     echo "========================="
 fi
 
-echo "Preparing validation cases..."
-"$PYTHON" scripts/setup_cases.py "${setupArgs[@]}"
 mapfile -t caseNames < <("$PYTHON" scripts/setup_cases.py --list "${setupArgs[@]}")
 
 totalCases="${#caseNames[@]}"
@@ -173,6 +171,32 @@ if [ "$totalCases" -eq 0 ]; then
     echo "No validation cases selected."
     exit 0
 fi
+
+# One batch folder per job submission: cases/case_NNN_<date>_<time>/, holding
+# every selected case as cases/<batchName>/<caseName>/ (built directly via
+# --dest-root, no separate staging copy). NNN is a global counter shared with
+# validation/Allrun, so local runs and sbatch submissions never collide.
+runTimestamp="$(date +%Y%m%d_%H%M%S)"
+
+nextBatchName()
+{
+    local maxN=0
+    local n
+    for d in cases/case_[0-9][0-9][0-9]_*; do
+        [ -d "$d" ] || continue
+        n="$(basename "$d" | sed -n 's/^case_\([0-9]\{3\}\)_.*/\1/p')"
+        [ -n "$n" ] || continue
+        n=$((10#$n))
+        if [ "$n" -gt "$maxN" ]; then
+            maxN="$n"
+        fi
+    done
+    printf 'case_%03d_%s' "$((maxN + 1))" "$runTimestamp"
+}
+
+batchName="$(nextBatchName)"
+echo "Preparing validation cases into cases/${batchName}/ ..."
+"$PYTHON" scripts/setup_cases.py --dest-root "cases/${batchName}" "${setupArgs[@]}"
 
 if [ "$totalCores" -lt 1 ]; then
     echo "ERROR: total core count must be positive, got $totalCores" >&2
@@ -192,6 +216,7 @@ if [ "$parallelCases" -gt "$totalCases" ]; then
 fi
 
 echo "=== Run Plan ==="
+echo "Batch folder:       cases/${batchName}"
 echo "Selected cases:     $totalCases"
 echo "Cores per case:     $coresPerCase"
 echo "Parallel case slots: $parallelCases"
@@ -202,7 +227,7 @@ set_case_cores()
 {
     local caseName="$1"
     local cores="$2"
-    local dict="cases/${caseName}/system/decomposeParDict"
+    local dict="cases/${batchName}/${caseName}/system/decomposeParDict"
 
     "$PYTHON" - "$dict" "$cores" <<'PY'
 import re
@@ -229,7 +254,7 @@ run_case()
 {
     local caseName="$1"
     local cores="$2"
-    local caseDir="$suiteDir/cases/$caseName"
+    local caseDir="$suiteDir/cases/${batchName}/${caseName}"
 
     set_case_cores "$caseName" "$cores"
     echo "[$(date)] START $caseName (${cores} cores)"
@@ -239,7 +264,7 @@ run_case()
         --env FOAM_SIGFPE=0 \
         --env MPLCONFIGDIR=/tmp \
         "$OF2506_IMAGE" \
-        bash -lc "source /openfoam/bash.rc && cd '$caseDir' && ./Allclean_long && ./Allrun"
+        bash -lc "source /openfoam/bash.rc && cd '$caseDir' && ./Allrun"
     echo "[$(date)] DONE  $caseName"
 }
 
@@ -262,9 +287,9 @@ run_wave()
     for ((i = 0; i < waveSize; i++)); do
         caseName="${caseNames[$((startIndex + i))]}"
         names+=("$caseName")
-        monitorArgs+=(--case "$caseName")
-        echo "  -> $caseName (log: cases/$caseName/log.validationJob)"
-        run_case "$caseName" "$coresPerCase" > "cases/$caseName/log.validationJob" 2>&1 &
+        monitorArgs+=(--case "${batchName}/${caseName}")
+        echo "  -> $caseName (log: cases/${batchName}/$caseName/log.validationJob)"
+        run_case "$caseName" "$coresPerCase" > "cases/${batchName}/$caseName/log.validationJob" 2>&1 &
         pids+=("$!")
     done
 
@@ -291,7 +316,7 @@ run_wave()
         if [ "${results[$i]}" -eq 0 ]; then
             echo "  OK: ${names[$i]}"
         else
-            echo "  FAILED: ${names[$i]} (see cases/${names[$i]}/log.validationJob)" >&2
+            echo "  FAILED: ${names[$i]} (see cases/${batchName}/${names[$i]}/log.validationJob)" >&2
         fi
     done
 

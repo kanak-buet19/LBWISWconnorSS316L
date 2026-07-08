@@ -1,0 +1,37 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  3.0.1                                 |
+|   \\  /    A nd           | Web:      www.OpenFOAM.org                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      setFieldsDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+defaultFieldValues
+(
+    volScalarFieldValue alpha.metal 0
+);
+
+regions
+(
+    boxToCell
+    {
+        // gas layer: y=0 to 0.100mm
+        // metal:     y=0.100mm to 0.500mm, full z length
+        box (0 0.100e-3 0) (0.320e-3 0.500e-3 0.500e-3);
+        fieldValues
+        (
+            volScalarFieldValue alpha.metal 1
+        );
+    }
+);
+
+// ************************************************************************* //

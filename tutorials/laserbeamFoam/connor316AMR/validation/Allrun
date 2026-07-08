@@ -36,21 +36,50 @@ if [ "$#" -eq 0 ]; then
     fi
 fi
 
-python3 scripts/setup_cases.py "$@"
-
+# --setup-only/--list-enabled/--list are dev/tuning modes with no run and no
+# batch context, so they keep the plain cases/<name>/ layout.
 for arg in "$@"; do
     if [ "$arg" = "--setup-only" ] || [ "$arg" = "--list-enabled" ] || [ "$arg" = "--list" ]; then
+        python3 scripts/setup_cases.py "$@"
         exit 0
     fi
 done
 
 mapfile -t caseNames < <(python3 scripts/setup_cases.py --list "$@")
 
+# Every Allrun invocation gets ONE batch folder: cases/case_NNN_<date>_<time>/.
+# setup_cases.py builds every selected case straight into that folder (via
+# --dest-root) as cases/<batchName>/<caseName>/ -- no separate staging copy.
+# NNN is a global counter across all past batches, so separate invocations
+# never collide with each other.
+runTimestamp="$(date +%Y%m%d_%H%M%S)"
+
+nextBatchName()
+{
+    local maxN=0
+    local n
+    for d in cases/case_[0-9][0-9][0-9]_*; do
+        [ -d "$d" ] || continue
+        n="$(basename "$d" | sed -n 's/^case_\([0-9]\{3\}\)_.*/\1/p')"
+        [ -n "$n" ] || continue
+        n=$((10#$n))
+        if [ "$n" -gt "$maxN" ]; then
+            maxN="$n"
+        fi
+    done
+    printf 'case_%03d_%s' "$((maxN + 1))" "$runTimestamp"
+}
+
+batchName="$(nextBatchName)"
+echo "===== Batch: cases/${batchName} (${#caseNames[@]} case(s)) ====="
+
+python3 scripts/setup_cases.py --dest-root "cases/${batchName}" "$@"
+
 set_case_cores()
 {
     local caseName="$1"
     local cores="$2"
-    local dict="cases/${caseName}/system/decomposeParDict"
+    local dict="cases/${batchName}/${caseName}/system/decomposeParDict"
 
     python3 - "$dict" "$cores" <<'PY'
 import re
@@ -80,9 +109,8 @@ run_case()
 
     set_case_cores "$caseName" "$cores"
     (
-        cd "cases/${caseName}"
+        cd "cases/${batchName}/${caseName}"
         echo "===== Running ${caseName} on ${cores} cores ====="
-        ./Allclean_long
         ./Allrun
     )
 }
@@ -102,7 +130,7 @@ run_batch()
     local status=0
 
     echo
-    echo "===== Starting batch: ${batchSize} case(s), ${cores} cores each ====="
+    echo "===== Starting wave: ${batchSize} case(s), ${cores} cores each ====="
     if [ "$batchSize" -eq 1 ]; then
         caseName="${caseNames[$startIndex]}"
         echo "  -> ${caseName}"
@@ -114,9 +142,9 @@ run_batch()
     for ((i = 0; i < batchSize; i++)); do
         caseName="${caseNames[$((startIndex + i))]}"
         names+=("$caseName")
-        monitorArgs+=(--case "$caseName")
-        echo "  -> ${caseName} (log: cases/${caseName}/log.validationAllrun)"
-        run_case "$caseName" "$cores" > "cases/${caseName}/log.validationAllrun" 2>&1 &
+        monitorArgs+=(--case "${batchName}/${caseName}")
+        echo "  -> ${caseName} (log: cases/${batchName}/${caseName}/log.validationAllrun)"
+        run_case "$caseName" "$cores" > "cases/${batchName}/${caseName}/log.validationAllrun" 2>&1 &
         pids+=("$!")
     done
 
@@ -140,7 +168,7 @@ run_batch()
         if [ "${results[$i]}" -eq 0 ]; then
             echo "  OK: ${names[$i]}"
         else
-            echo "  FAILED: ${names[$i]} (see cases/${names[$i]}/log.validationAllrun)" >&2
+            echo "  FAILED: ${names[$i]} (see cases/${batchName}/${names[$i]}/log.validationAllrun)" >&2
         fi
     done
 

@@ -1,0 +1,101 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.OpenFOAM.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      blockMeshDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+convertToMeters 1.0;
+
+// testrun19-derived template: pulsed/short-track 316L, simple transport model.
+// P=147W, v=200mm/s, d_laser=0.07mm.
+// x=cross-track, y=depth (y=0=top/atmosphere), z=scan direction.
+// Base 10 um; 1-level AMR -> 5 um near melt pool.
+//   x: 0.320 mm  (32 cells)
+//   y: 0.500 mm  (50 cells)
+//   z: 0.500 mm  (50 cells)
+
+vertices
+(
+    (0         0         0        )  // 0
+    (0.320e-3  0         0        )  // 1
+    (0.320e-3  0.500e-3  0        )  // 2
+    (0         0.500e-3  0        )  // 3
+    (0         0         0.500e-3 )  // 4
+    (0.320e-3  0         0.500e-3 )  // 5
+    (0.320e-3  0.500e-3  0.500e-3 )  // 6
+    (0         0.500e-3  0.500e-3 )  // 7
+);
+
+blocks
+(
+    hex (0 1 2 3 4 5 6 7) (32 50 50) simpleGrading (1 1 1)
+);
+
+edges
+(
+);
+
+boundary
+(
+    lowerWall
+    {
+        type wall;
+        faces
+        (
+            (3 7 6 2)
+        );
+    }
+
+    atmosphere
+    {
+        type patch;
+        faces
+        (
+            (1 5 4 0)
+        );
+    }
+
+    rightWall
+    {
+        type patch;
+        faces
+        (
+            (1 2 6 5)
+        );
+    }
+
+    leftWall
+    {
+        type patch;
+        faces
+        (
+            (0 4 7 3)
+        );
+    }
+
+    frontAndBack
+    {
+        type patch;
+        faces
+        (
+            (0 3 2 1)
+            (5 6 7 4)
+        );
+    }
+);
+
+mergePatchPairs
+(
+);
+
+// ************************************************************************* //
