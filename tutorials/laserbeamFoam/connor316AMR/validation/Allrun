@@ -5,8 +5,18 @@ set -e
 suiteDir="$(cd "$(dirname "$0")" && pwd)"
 cd "$suiteDir"
 
+if [ -z "${PYTHON:-}" ]; then
+    if [ -x /home/kanak/.venv310/bin/python ]; then
+        export PYTHON=/home/kanak/.venv310/bin/python
+    else
+        export PYTHON=python3
+    fi
+fi
+export MPLCONFIGDIR="${MPLCONFIGDIR:-$suiteDir/.mplconfig}"
+mkdir -p "$MPLCONFIGDIR"
+
 if [ "$#" -eq 0 ]; then
-    mapfile -t menuCases < <(python3 scripts/setup_cases.py --list-enabled)
+    mapfile -t menuCases < <("$PYTHON" scripts/setup_cases.py --list-enabled)
     echo "Select case to run:"
     echo "  0) all"
     i=1
@@ -40,12 +50,12 @@ fi
 # batch context, so they keep the plain runs/<name>/ layout.
 for arg in "$@"; do
     if [ "$arg" = "--setup-only" ] || [ "$arg" = "--list-enabled" ] || [ "$arg" = "--list" ]; then
-        python3 scripts/setup_cases.py "$@"
+        "$PYTHON" scripts/setup_cases.py "$@"
         exit 0
     fi
 done
 
-mapfile -t caseNames < <(python3 scripts/setup_cases.py --list "$@")
+mapfile -t caseNames < <("$PYTHON" scripts/setup_cases.py --list "$@")
 
 # Every Allrun invocation gets ONE batch folder: runs/case_NNN_<date>_<time>/.
 # setup_cases.py builds every selected case straight into that folder (via
@@ -73,7 +83,7 @@ nextBatchName()
 batchName="$(nextBatchName)"
 echo "===== Batch: runs/${batchName} (${#caseNames[@]} case(s)) ====="
 
-python3 scripts/setup_cases.py --dest-root "runs/${batchName}" "$@"
+"$PYTHON" scripts/setup_cases.py --dest-root "runs/${batchName}" "$@"
 
 set_case_cores()
 {
@@ -81,7 +91,7 @@ set_case_cores()
     local cores="$2"
     local dict="runs/${batchName}/${caseName}/system/decomposeParDict"
 
-    python3 - "$dict" "$cores" <<'PY'
+    "$PYTHON" - "$dict" "$cores" <<'PY'
 import re
 import sys
 from pathlib import Path
@@ -148,7 +158,7 @@ run_batch()
         pids+=("$!")
     done
 
-    python3 scripts/monitor_case_progress.py --cores "$cores" --interval 2 "${monitorArgs[@]}" &
+    "$PYTHON" scripts/monitor_case_progress.py --cores "$cores" --interval 2 "${monitorArgs[@]}" &
     monitorPid="$!"
 
     for ((i = 0; i < batchSize; i++)); do

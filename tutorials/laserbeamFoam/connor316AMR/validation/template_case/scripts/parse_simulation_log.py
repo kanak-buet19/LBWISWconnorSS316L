@@ -210,6 +210,7 @@ def main():
     exec_time = 0.0
     abs_val = 0.0
     t_max = 0.0
+    t_max_metal = 0.0
     p_vap_max_kpa = 0.0
     max_u_metal = 0.0
     max_u_gas = 0.0
@@ -297,6 +298,10 @@ def main():
                 if match:
                     t_max = float(match.group(1))
                     p_vap_max_kpa = float(match.group(2)) / 1000.0
+                # Only written by solvers carrying the interface-flux fix.
+                match = re.search(r"TMaxMetal = ([\d\.e\-+]+)", line)
+                if match:
+                    t_max_metal = float(match.group(1))
             elif "maxU_metal = " in line:
                 match = re.search(r"maxU_metal = ([\d\.e\-+]+).*maxU_gas = ([\d\.e\-+]+)", line)
                 if match:
@@ -312,6 +317,8 @@ def main():
                 postfix['Abs'] = f"{abs_val*100.0:.1f}%"
             if t_max > 0.0:
                 postfix['TMax'] = f"{t_max:.0f}K"
+            if t_max_metal > 0.0:
+                postfix['TMet'] = f"{t_max_metal:.0f}K"
             if p_vap_max_kpa > 0.0:
                 postfix['pVap'] = f"{p_vap_max_kpa:.1f}kPa"
             if max_u_metal > 0.0 or max_u_gas > 0.0:

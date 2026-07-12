@@ -11,7 +11,10 @@ set -o pipefail
 bParallel=true # Only set to false for debugging purposes.
 convertVTK=true # Convert written times to legacy VTK during the solver run.
 analyzeMeltpool=true # Analyze each newly converted legacy VTK during the solver run.
-pythonExe="${PYTHON:-/home/kanak/.venv/venv314/bin/python}"
+pythonExe="${PYTHON:-python3}"
+
+writeSettleTimeout=600 # Max seconds to wait for a parallel write to land on disk.
+writeSettleAttempts=3  # Reconstruct/convert attempts per written time.
 
 latestInternalVTK()
 {
@@ -21,16 +24,86 @@ latestInternalVTK()
         | cut -d' ' -f2-
 }
 
+# Size + file-count fingerprint of every processor*/<time> tree. Empty if none exist.
+writeFootprint()
+{
+    local timeName="$1"
+
+    find processor*/"${timeName}" -type f -printf '%s\n' 2>/dev/null \
+        | awk '{n++; s+=$1} END {if (n) print n"/"s}'
+}
+
+# Block until every processor has written <time> and the trees stop growing.
+# The solver prints "Writing ..." when the write *starts*; with AMR each write
+# also dumps a per-processor polyMesh, so a fixed sleep is not enough.
+waitForCompleteWrite()
+{
+    local timeName="$1"
+    local deadline=$((SECONDS + writeSettleTimeout))
+    local nProcs=0
+    local nReady=0
+    local prev=""
+    local cur=""
+
+    nProcs=$(find . -maxdepth 1 -type d -name 'processor*' | wc -l)
+    if [ "$nProcs" -eq 0 ]; then
+        sleep 2 # Serial run: nothing to synchronise across.
+        return 0
+    fi
+
+    while [ "$SECONDS" -lt "$deadline" ]
+    do
+        nReady=$(find processor*/"${timeName}" -maxdepth 0 -type d 2>/dev/null | wc -l)
+        if [ "$nReady" -eq "$nProcs" ]; then
+            break
+        fi
+        sleep 1
+    done
+
+    if [ "$nReady" -ne "$nProcs" ]; then
+        echo "[WARNING] Only ${nReady}/${nProcs} processors wrote time ${timeName} within ${writeSettleTimeout}s." >&4
+        return 1
+    fi
+
+    # Two identical footprints one second apart means the flush is done.
+    while [ "$SECONDS" -lt "$deadline" ]
+    do
+        cur="$(writeFootprint "$timeName")"
+        if [ -n "$cur" ] && [ "$cur" = "$prev" ]; then
+            return 0
+        fi
+        prev="$cur"
+        sleep 1
+    done
+
+    echo "[WARNING] Write of time ${timeName} still growing after ${writeSettleTimeout}s; converting anyway." >&4
+    return 0
+}
+
 postProcessWrittenTime()
 {
     local timeName="$1"
     local vtkFile=""
+    local attempt=1
 
     echo "[DEBUG] Post-processing output time step ${timeName}..."
-    if ! ./foamVTK.sh "$timeName"; then
-        echo "[WARNING] foamVTK.sh failed for time step ${timeName}; solver will continue." >&4
-        return 0
-    fi
+
+    while true
+    do
+        if ./foamVTK.sh "$timeName"; then
+            break
+        fi
+
+        if [ "$attempt" -ge "$writeSettleAttempts" ]; then
+            echo "[WARNING] foamVTK.sh failed for time step ${timeName} after ${attempt} attempts; solver will continue." >&4
+            return 0
+        fi
+
+        echo "[DEBUG] foamVTK.sh failed for ${timeName} (attempt ${attempt}); re-checking write and retrying..."
+        attempt=$((attempt + 1))
+        sleep 5
+        waitForCompleteWrite "$timeName" || true
+    done
 
     if ${analyzeMeltpool}; then
         vtkFile="$(latestInternalVTK)"
@@ -61,9 +134,9 @@ postProcessQueueWorker()
             break
         fi
 
-        # Sleep to prevent race condition where reconstructParMesh runs
-        # before the solver finishes writing all files to disk
-        sleep 2
+        # reconstructParMesh must not run before the solver has flushed every
+        # processor*/<time> directory to disk.
+        waitForCompleteWrite "$queuedTime" || true
         postProcessWrittenTime "$queuedTime"
     done < "$queueFile"
 }
