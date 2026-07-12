@@ -96,6 +96,8 @@
 
     alpha_smoothed = fvc::average(alpha1);
 
+    #include "updateInterfaceTemperature.H"
+
     dSigmaDtf = Marangoni_Constant;
 
     if

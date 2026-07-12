@@ -46,7 +46,7 @@ if (damperSwitch)
 }
 
 {
-    const volScalarField T_rc(min(T, T_recoil_cap));
+    const volScalarField T_rc(min(TInterface, T_recoil_cap));
     pVap = recoil_coeff*p0*Foam::exp(LatentHeatVap*Mm*((T_rc - Tvap)/(R*T_rc*Tvap)));
 }
 pVap.correctBoundaryConditions();  // ADDED

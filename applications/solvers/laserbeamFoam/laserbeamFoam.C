@@ -414,7 +414,11 @@ int main(int argc, char *argv[])
             Info << "[DEBUG-Solidification] No active melt pool found. Skipping CSV log." << endl;
         }
 
+        // TMaxMetal excludes the gas cells: a TMax that sits far above it is a
+        // gas-side interface cell overheating, not real melt-pool superheat.
         Info<< "TMax = " << gMax(T.primitiveField())
+            << ", TMaxMetal = "
+            << gMax(pos(alpha1.primitiveField() - 0.5)*T.primitiveField())
             << ", pVapMax = " << gMax(pVap.primitiveField()) << endl;
 
         {

@@ -30,7 +30,11 @@
 
         TRHS.correctBoundaryConditions();
 
-        const volScalarField Tpos(max(T, T_ambient));
+        // T is updated by the latent-heat iteration below, so refresh the
+        // interface temperature the evaporation fluxes are evaluated with.
+        #include "updateInterfaceTemperature.H"
+
+        const volScalarField Tpos(max(TInterface, T_ambient));
 
         Qv =
             0.82*LatentHeatVap*Mm*p0

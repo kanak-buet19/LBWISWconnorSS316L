@@ -811,6 +811,35 @@ volScalarField thermalDamper
     zeroGradientFvPatchScalarField::typeName
 );
 
+// Interface-midplane temperature used to evaluate the evaporation fluxes
+// (recoil pressure and Hertz-Knudsen cooling). Evaluating exp(Lv*M*(T-Tvap)
+// /(R*T*Tvap)) with the local cell temperature overestimates both fluxes on
+// the gas side of the diffuse interface, where rho*cp is ~4 orders of
+// magnitude smaller than in the metal and the cells therefore overheat.
+// See Meier et al., Adv. Model. Simul. Eng. Sci. (2024), arXiv:2401.12114.
+const Switch interfaceFluxTemperature
+(
+    transportProperties.lookupOrDefault<Switch>("interfaceFluxTemperature", true)
+);
+
+const label nInterfaceTSmooth
+(
+    transportProperties.lookupOrDefault<label>("nInterfaceTSmooth", 2)
+);
+
+volScalarField TInterface
+(
+    IOobject
+    (
+        "TInterface",
+        runTime.timeName(),
+        mesh,
+        IOobject::NO_READ,
+        IOobject::AUTO_WRITE
+    ),
+    T
+);
+
 volScalarField alpha_filtered
 (
     IOobject
