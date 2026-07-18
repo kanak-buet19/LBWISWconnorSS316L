@@ -12,7 +12,7 @@
 #   - OpenFOAM 2506 runs inside the Apptainer image (not an env-module).
 #   - Post-processing Python runs from the host conda env (isw_env).
 #   - Allrun_long is executed INSIDE the container; it itself invokes
-#     laserbeamFoam (16 MPI ranks) and the host $PYTHON for meltpool analysis.
+#     laserbeamFoamISW (16 MPI ranks) and the host $PYTHON for meltpool analysis.
 #
 # Submit with:   sbatch job.sh
 # Rank count is set by system/decomposeParDict (numberOfSubdomains = 16);
@@ -84,7 +84,7 @@ command -v decomposePar
 command -v foamDictionary
 command -v reconstructPar
 command -v foamToVTK
-command -v laserbeamFoam
+command -v laserbeamFoamISW
 '
 
 subdomains="$(of2506 "foamDictionary -entry numberOfSubdomains -value '$caseDir/system/decomposeParDict'")"

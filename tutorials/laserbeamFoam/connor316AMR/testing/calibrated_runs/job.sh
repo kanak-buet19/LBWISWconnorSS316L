@@ -137,7 +137,7 @@ command -v foamDictionary
 command -v reconstructPar
 command -v reconstructParMesh
 command -v foamToVTK
-command -v laserbeamFoam
+command -v laserbeamFoamISW
 "$PYTHON" - <<'"'"'PY'"'"'
 import importlib
 import sys

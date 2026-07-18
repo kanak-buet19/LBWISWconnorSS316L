@@ -17,7 +17,7 @@ setFields 2>&1 | tee log.setFields
 
 if [ "$NPROCS" -gt 1 ]; then
     decomposePar 2>&1 | tee log.decomposePar
-    mpirun --oversubscribe -np "$NPROCS" laserbeamFoam -parallel 2>&1 | tee log.laserbeamFoam
+    mpirun --oversubscribe -np "$NPROCS" laserbeamFoamISW -parallel 2>&1 | tee log.laserbeamFoam
 else
-    laserbeamFoam 2>&1 | tee log.laserbeamFoam
+    laserbeamFoamISW 2>&1 | tee log.laserbeamFoam
 fi

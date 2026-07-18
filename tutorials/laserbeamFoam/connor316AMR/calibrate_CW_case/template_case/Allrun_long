@@ -174,24 +174,24 @@ if ${bParallel}; then
         foamDictionary -entry numberOfSubdomains \
                        -value system/decomposeParDict)
 
-    echo "[DEBUG] Starting laserbeamFoam in parallel on $nCores cores..."
+    echo "[DEBUG] Starting laserbeamFoamISW in parallel on $nCores cores..."
     if ${convertVTK}; then
         mpirun --oversubscribe -np $nCores \
-            laserbeamFoam \
+            laserbeamFoamISW \
             -parallel \
             2>&1 | convertOnWrite | "$pythonExe" scripts/parse_simulation_log.py ${appendFlag} || { echo "[ERROR] Parallel simulation failed! Exiting."; exit 1; }
     else
         mpirun --oversubscribe -np $nCores \
-            laserbeamFoam \
+            laserbeamFoamISW \
             -parallel \
             2>&1 | "$pythonExe" scripts/parse_simulation_log.py ${appendFlag} || { echo "[ERROR] Parallel simulation failed! Exiting."; exit 1; }
     fi
 else
-    echo "[DEBUG] Starting laserbeamFoam in single-processor mode..."
+    echo "[DEBUG] Starting laserbeamFoamISW in single-processor mode..."
     if ${convertVTK}; then
-        laserbeamFoam 2>&1 | convertOnWrite | "$pythonExe" scripts/parse_simulation_log.py ${appendFlag} || { echo "[ERROR] Simulation failed! Exiting."; exit 1; }
+        laserbeamFoamISW 2>&1 | convertOnWrite | "$pythonExe" scripts/parse_simulation_log.py ${appendFlag} || { echo "[ERROR] Simulation failed! Exiting."; exit 1; }
     else
-        laserbeamFoam 2>&1 | "$pythonExe" scripts/parse_simulation_log.py ${appendFlag} || { echo "[ERROR] Simulation failed! Exiting."; exit 1; }
+        laserbeamFoamISW 2>&1 | "$pythonExe" scripts/parse_simulation_log.py ${appendFlag} || { echo "[ERROR] Simulation failed! Exiting."; exit 1; }
     fi
 fi
 echo "[DEBUG] Simulation completed successfully."

@@ -140,20 +140,20 @@ if ${bParallel}; then
 
     if ${convertVTK}; then
         mpirun --oversubscribe -np $nCores \
-            laserbeamFoam \
+            laserbeamFoamISW \
             -parallel \
             2>&1 | convertOnWrite | tee log.laserbeamFoam
     else
         mpirun --oversubscribe -np $nCores \
-            laserbeamFoam \
+            laserbeamFoamISW \
             -parallel \
             2>&1 | tee log.laserbeamFoam
     fi
 else
     if ${convertVTK}; then
-        laserbeamFoam 2>&1 | convertOnWrite | tee log.laserbeamFoam
+        laserbeamFoamISW 2>&1 | convertOnWrite | tee log.laserbeamFoam
     else
-        laserbeamFoam 2>&1 | tee log.laserbeamFoam
+        laserbeamFoamISW 2>&1 | tee log.laserbeamFoam
     fi
 fi
 

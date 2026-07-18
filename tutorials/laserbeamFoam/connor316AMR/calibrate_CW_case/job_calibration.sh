@@ -11,7 +11,7 @@
 #
 # Sizing the swarm:
 #   --ntasks-per-node  = total cores the orchestrator may use (= CALIB_TOTAL_CORES)
-#   CALIB_CORES_PER_SIM = cores per individual laserbeamFoam sim
+#   CALIB_CORES_PER_SIM = cores per individual laserbeamFoamISW sim
 #   parallel sims      = CALIB_TOTAL_CORES / CALIB_CORES_PER_SIM
 #   e.g. 80 cores / 8 per sim = 10 sims at once:
 #        sbatch --ntasks-per-node=80 --export=ALL,CALIB_CORES_PER_SIM=8 job_calibration.sh
@@ -78,7 +78,7 @@ if miss:
 print("Python environment OK.")
 PY
 apptainer exec --cleanenv --env USER="$OF2506_USER" "$OF2506_IMAGE" \
-    bash -lc 'source /openfoam/bash.rc && command -v laserbeamFoam blockMesh foamToVTK >/dev/null && echo "OpenFOAM image OK."'
+    bash -lc 'source /openfoam/bash.rc && command -v laserbeamFoamISW blockMesh foamToVTK >/dev/null && echo "OpenFOAM image OK."'
 echo "========================="
 
 if [ "${DRY_RUN:-0}" = "1" ]; then

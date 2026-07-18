@@ -17,7 +17,7 @@ runApplication setFields
 
 if [ "$NPROCS" -gt 1 ]; then
     runApplication decomposePar
-    runParallel laserbeamFoam
+    runParallel laserbeamFoamISW
 else
-    runApplication laserbeamFoam
+    runApplication laserbeamFoamISW
 fi

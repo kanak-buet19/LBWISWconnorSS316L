@@ -81,7 +81,7 @@ command -v decomposePar
 command -v foamDictionary
 command -v reconstructPar
 command -v foamToVTK
-command -v laserbeamFoam
+command -v laserbeamFoamISW
 '
 
 subdomains="$(of2506 "foamDictionary -entry numberOfSubdomains -value '$caseDir/system/decomposeParDict'")"
