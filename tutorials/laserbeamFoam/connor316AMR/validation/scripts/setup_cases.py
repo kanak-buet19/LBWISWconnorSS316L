@@ -136,6 +136,36 @@ def set_electric_resistivity(case_dir: Path, value: float) -> None:
     )
 
 
+def set_sigma(case_dir: Path, value: float) -> None:
+    replace_regex(
+        case_dir / "constant" / "transportProperties",
+        r"^(\s*sigma\s+)[-+0-9.eE]+(\s*;.*)$",
+        rf"\g<1>{fmt_param(value)}\2",
+    )
+
+
+def set_cores(case_dir: Path, cores: int) -> None:
+    if cores < 1:
+        raise RuntimeError(f"cores must be positive, got {cores}")
+    replace_regex(
+        case_dir / "system" / "decomposeParDict",
+        r"^(\s*numberOfSubdomains\s+)\d+(\s*;.*)$",
+        rf"\g<1>{cores}\2",
+    )
+
+
+def set_surface_tension_model(case_dir: Path, model: str) -> None:
+    if model not in ("constant", "linear", "FeS"):
+        raise RuntimeError(
+            f"surface_tension_model must be 'constant', 'linear' or 'FeS', got {model!r}"
+        )
+    replace_regex(
+        case_dir / "constant" / "transportProperties",
+        r"^(\s*surfaceTensionModel\s+)\w+(\s*;.*)$",
+        rf"\g<1>{model}\2",
+    )
+
+
 def expand_case_sweeps(cases: list[dict]) -> list[dict]:
     expanded = []
     for case in cases:
@@ -705,6 +735,12 @@ def main() -> None:
             set_shielding_gas(case_dir, gas)
         if "_electric_resistivity_value" in case:
             set_electric_resistivity(case_dir, case["_electric_resistivity_value"])
+        if "surface_tension_model" in case:
+            set_surface_tension_model(case_dir, case["surface_tension_model"])
+        if "sigma" in case:
+            set_sigma(case_dir, float(case["sigma"]))
+        if "cores" in case:
+            set_cores(case_dir, int(case["cores"]))
         configure_case(case_dir, case)
 
     if args.setup_only:

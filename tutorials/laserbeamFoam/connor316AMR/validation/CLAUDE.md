@@ -70,10 +70,13 @@ python3 template_case/scripts/analyze_meltpool_vtu.py \
 | `domain_z_m` | no | Override Z extent |
 | `domain_depth_m` | no | Override Y (substrate) extent, else auto from `target_depth_um × 1.5` |
 | `electric_resistivity_values` | no | Single value or list → generates sweep sub-cases named `<name>_rho<value>` |
+| `surface_tension_model` | no | `constant` (default) \| `linear` \| `FeS` → patches `surfaceTensionModel` (SS316L material only). `FeS` drives both sigma(T) and the Marangoni slope together |
+| `sigma` | no | Overrides `sigma` (reference surface tension, N/m) in `transportProperties` |
 | `exp_tag` | no | Prefix for `exp_<tag>_<power>W_<speed>_summary.csv` lookup |
 | `exp_timeseries_csv` | no | Path (relative to `validation/`) to `(t_ms, keyhole_depth_um)` CSV for timeseries plot |
 | `write_interval_s` | no | Per-case override |
 | `template` | no | Per-case template dir override |
+| `cores` | no | Overrides `numberOfSubdomains` in `decomposeParDict` (default 8); `Allrun_long`/`job.sh` read the count live so no other change needed |
 
 ### Domain sizing
 
@@ -88,7 +91,7 @@ python3 template_case/scripts/analyze_meltpool_vtu.py \
 - `SS316L` — 316L stainless steel (Hofmann 2026 targets)
 - `Ti64` — Ti-6Al-4V (Wang / Simonds / Tao targets)
 
-To change a material property for one case only: add `electric_resistivity_values` in `cases.json` (only `elec_resistivity` is patchable this way). For other props, edit the material file and re-run `--setup-only --rebuild`.
+To change a material property for one case only: `elec_resistivity` and `surfaceTensionModel` are patchable per-case via `electric_resistivity_values` and `surface_tension_model`. For other props, edit the material file and re-run `--setup-only --rebuild`.
 
 ## Postprocessing pipeline
 
