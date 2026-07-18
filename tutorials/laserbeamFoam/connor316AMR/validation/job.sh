@@ -17,9 +17,11 @@
 #   sbatch --export=ALL,VALIDATION_CASES="case_a,case_b" job.sh
 #
 # Sizing:
-#   total cores come from SLURM_NTASKS, or VALIDATION_TOTAL_CORES outside Slurm.
-#   each case gets at most VALIDATION_MAX_CORES_PER_CASE cores, capped at 8.
-#   default is 8 cores/case, so 64 tasks runs 8 cases at once.
+#   every selected case runs concurrently (one wave), each using its own
+#   per-case `cores` from cases.json (default 8; see setup_cases.py set_cores).
+#   Size your #SBATCH allocation (or VALIDATION_TOTAL_CORES outside Slurm) to
+#   match the SUM of the selected cases' cores yourself -- this script no
+#   longer overrides per-case core counts or auto-computes parallelism.
 
 set -Eeo pipefail
 
@@ -49,20 +51,14 @@ export FOAM_SIGFPE=0
 export MPLCONFIGDIR="$suiteDir/.mplconfig"
 mkdir -p "$MPLCONFIGDIR"
 
+# Informational only now -- used to warn if it doesn't match the sum of
+# per-case cores below, not to size or cap anything.
 totalCores="${VALIDATION_TOTAL_CORES:-${SLURM_NTASKS:-64}}"
-maxCoresPerCase="${VALIDATION_MAX_CORES_PER_CASE:-8}"
-if [ "$maxCoresPerCase" -gt 8 ]; then
-    maxCoresPerCase=8
-fi
-if [ "$maxCoresPerCase" -lt 1 ]; then
-    maxCoresPerCase=1
-fi
 
 DEFAULT_HOFMANN_CASES=(
-    hofmann_scantrack_250W_600mms_r25um
-    hofmann_scantrack_250W_600mms_r25um_mehrdad
-    riffel_pulsed_1050W_10Hz_191um
-    riffel_pulsed_1050W_10Hz_191um_template_case
+    scantrack_SS316_200W_200mms_r40um
+    scantrack_SS316_200W_200mms_r40um_linearSigma
+    scantrack_SS316_200W_200mms_r40um_constantSigmaAtTvap
 )
 
 setupArgs=("$@")
@@ -96,7 +92,6 @@ echo "Job ID:          ${SLURM_JOB_ID:-unknown}"
 echo "Node list:       ${SLURM_NODELIST:-unknown}"
 echo "Slurm tasks:     ${SLURM_NTASKS:-unset}"
 echo "Total cores:     $totalCores"
-echo "Max cores/case:  $maxCoresPerCase"
 echo "OF2506_IMAGE:    $OF2506_IMAGE"
 echo "PYTHON:          $PYTHON"
 echo "Selection args:  ${setupArgs[*]:-(enabled cases)}"
@@ -139,7 +134,7 @@ command -v foamDictionary
 command -v reconstructPar
 command -v reconstructParMesh
 command -v foamToVTK
-command -v laserbeamFoam
+command -v laserbeamFoamISW
 "$PYTHON" - <<'"'"'PY'"'"'
 import importlib
 import sys
@@ -198,57 +193,35 @@ batchName="$(nextBatchName)"
 echo "Preparing validation cases into runs/${batchName}/ ..."
 "$PYTHON" scripts/setup_cases.py --dest-root "runs/${batchName}" "${setupArgs[@]}"
 
-if [ "$totalCores" -lt 1 ]; then
-    echo "ERROR: total core count must be positive, got $totalCores" >&2
-    exit 2
-fi
-
-coresPerCase="$maxCoresPerCase"
-if [ "$totalCores" -lt "$coresPerCase" ]; then
-    coresPerCase="$totalCores"
-fi
-parallelCases=$((totalCores / coresPerCase))
-if [ "$parallelCases" -lt 1 ]; then
-    parallelCases=1
-fi
-if [ "$parallelCases" -gt "$totalCases" ]; then
-    parallelCases="$totalCases"
-fi
+# Each case's numberOfSubdomains was already set by setup_cases.py (from its
+# cases.json `cores`, default 8) -- read it back as the source of truth
+# instead of re-deriving or overwriting it here.
+caseCores=()
+sumCores=0
+for caseName in "${caseNames[@]}"; do
+    dict="runs/${batchName}/${caseName}/system/decomposeParDict"
+    cores="$(sed -n 's/^numberOfSubdomains[[:space:]]\+\([0-9]\+\).*/\1/p' "$dict" | head -1)"
+    if [ -z "$cores" ]; then
+        echo "ERROR: could not read numberOfSubdomains from $dict" >&2
+        exit 2
+    fi
+    caseCores+=("$cores")
+    sumCores=$((sumCores + cores))
+done
 
 echo "=== Run Plan ==="
 echo "Batch folder:       runs/${batchName}"
 echo "Selected cases:     $totalCases"
-echo "Cores per case:     $coresPerCase"
-echo "Parallel case slots: $parallelCases"
-printf '  - %s\n' "${caseNames[@]}"
+echo "Allocated cores:    $totalCores"
+echo "Sum of case cores:  $sumCores"
+if [ "$sumCores" -ne "$totalCores" ]; then
+    echo "WARNING: allocated cores ($totalCores) != sum of per-case cores ($sumCores)." >&2
+    echo "         Size your #SBATCH allocation / VALIDATION_TOTAL_CORES to match the sum." >&2
+fi
+for i in "${!caseNames[@]}"; do
+    echo "  - ${caseNames[$i]} (${caseCores[$i]} cores)"
+done
 echo "================"
-
-set_case_cores()
-{
-    local caseName="$1"
-    local cores="$2"
-    local dict="runs/${batchName}/${caseName}/system/decomposeParDict"
-
-    "$PYTHON" - "$dict" "$cores" <<'PY'
-import re
-import sys
-from pathlib import Path
-
-path = Path(sys.argv[1])
-cores = sys.argv[2]
-text = path.read_text()
-new_text, count = re.subn(
-    r"^numberOfSubdomains\s+\d+\s*;",
-    f"numberOfSubdomains  {cores};",
-    text,
-    count=1,
-    flags=re.MULTILINE,
-)
-if count != 1:
-    raise SystemExit(f"numberOfSubdomains entry not found in {path}")
-path.write_text(new_text)
-PY
-}
 
 run_case()
 {
@@ -256,7 +229,6 @@ run_case()
     local cores="$2"
     local caseDir="$suiteDir/runs/${batchName}/${caseName}"
 
-    set_case_cores "$caseName" "$cores"
     echo "[$(date)] START $caseName (${cores} cores)"
     apptainer exec --cleanenv \
         --env USER="$OF2506_USER" \
@@ -268,77 +240,47 @@ run_case()
     echo "[$(date)] DONE  $caseName"
 }
 
-run_wave()
-{
-    local startIndex="$1"
-    local waveSize="$2"
-    local pids=()
-    local names=()
-    local results=()
-    local monitorArgs=()
-    local monitorPid=""
-    local status=0
-    local i=""
-    local caseName=""
-
-    echo
-    echo "===== Starting wave: ${waveSize} case(s), ${coresPerCase} cores each ====="
-
-    for ((i = 0; i < waveSize; i++)); do
-        caseName="${caseNames[$((startIndex + i))]}"
-        names+=("$caseName")
-        monitorArgs+=(--case "${batchName}/${caseName}")
-        echo "  -> $caseName (log: runs/${batchName}/$caseName/log.validationJob)"
-        run_case "$caseName" "$coresPerCase" > "runs/${batchName}/$caseName/log.validationJob" 2>&1 &
-        pids+=("$!")
-    done
-
-    if [ "${VALIDATION_MONITOR:-1}" = "1" ]; then
-        "$PYTHON" scripts/monitor_case_progress.py --cores "$coresPerCase" --interval 5 "${monitorArgs[@]}" &
-        monitorPid="$!"
-    fi
-
-    for ((i = 0; i < waveSize; i++)); do
-        if wait "${pids[$i]}"; then
-            results[$i]=0
-        else
-            results[$i]=1
-            status=1
-        fi
-    done
-
-    if [ -n "$monitorPid" ]; then
-        kill "$monitorPid" 2>/dev/null || true
-        wait "$monitorPid" 2>/dev/null || true
-    fi
-
-    for ((i = 0; i < waveSize; i++)); do
-        if [ "${results[$i]}" -eq 0 ]; then
-            echo "  OK: ${names[$i]}"
-        else
-            echo "  FAILED: ${names[$i]} (see runs/${batchName}/${names[$i]}/log.validationJob)" >&2
-        fi
-    done
-
-    if [ "$status" -ne 0 ]; then
-        exit "$status"
-    fi
-}
-
 if [ "${DRY_RUN:-0}" = "1" ]; then
     echo "=== DRY RUN: cases prepared, solver not started ==="
     exit 0
 fi
 
 echo "Validation started at: $(date)"
-index=0
-while [ "$index" -lt "$totalCases" ]; do
-    remaining=$((totalCases - index))
-    waveSize="$parallelCases"
-    if [ "$remaining" -lt "$waveSize" ]; then
-        waveSize="$remaining"
-    fi
-    run_wave "$index" "$waveSize"
-    index=$((index + waveSize))
+echo
+echo "===== Starting all ${totalCases} case(s) concurrently ====="
+
+pids=()
+monitorArgs=()
+monitorPid=""
+status=0
+
+for i in "${!caseNames[@]}"; do
+    caseName="${caseNames[$i]}"
+    cores="${caseCores[$i]}"
+    monitorArgs+=(--case "${batchName}/${caseName}")
+    echo "  -> $caseName (log: runs/${batchName}/$caseName/log.validationJob)"
+    run_case "$caseName" "$cores" > "runs/${batchName}/$caseName/log.validationJob" 2>&1 &
+    pids+=("$!")
 done
+
+if [ "${VALIDATION_MONITOR:-1}" = "1" ]; then
+    "$PYTHON" scripts/monitor_case_progress.py --cores "$sumCores" --interval 5 "${monitorArgs[@]}" &
+    monitorPid="$!"
+fi
+
+for i in "${!caseNames[@]}"; do
+    if ! wait "${pids[$i]}"; then
+        status=1
+        echo "  FAILED: ${caseNames[$i]} (see runs/${batchName}/${caseNames[$i]}/log.validationJob)" >&2
+    fi
+done
+
+if [ -n "$monitorPid" ]; then
+    kill "$monitorPid" 2>/dev/null || true
+    wait "$monitorPid" 2>/dev/null || true
+fi
+
 echo "Validation completed at: $(date)"
+if [ "$status" -ne 0 ]; then
+    exit "$status"
+fi

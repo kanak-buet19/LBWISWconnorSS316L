@@ -144,7 +144,7 @@ def progress_bar(percent: float) -> Progress:
 
 def render(states: list[CaseState], cores: int) -> Table:
     table = Table(
-        title=f"Parallel validation batch - {len(states)} case(s), {cores} cores each",
+        title=f"Parallel validation batch - {len(states)} case(s), {cores} cores total",
         expand=True,
     )
     case_width = max((len(short_label(s.name)) for s in states), default=20)
