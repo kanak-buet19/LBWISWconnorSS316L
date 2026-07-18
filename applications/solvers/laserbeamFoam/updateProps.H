@@ -100,13 +100,8 @@
 
     dSigmaDtf = Marangoni_Constant;
 
-    if
-    (
-        (useTdepSigma && surfaceTensionModel == "FeS")
-     || (useTdepMarangoni && MarangoniModel == "FeS")
-    )
+    if (useFeSMarangoni)
     {
-        const bool updateSigmaField = useTdepSigma && surfaceTensionModel == "FeS";
         scalarField& sigmaI = sigmaField.primitiveFieldRef();
         scalarField& dSigmaDtI = dSigmaDtf.primitiveFieldRef();
         const scalarField& TI = T;
@@ -118,7 +113,7 @@
                 FeSAdsorptionEntropy*sulfurActivity
                *Foam::exp(FeSAdsorptionHeat/(FeSGasConstant*Tc));
 
-            if (updateSigmaField)
+            if (useFeSSigma)
             {
                 sigmaI[celli] =
                     FeSPureSigma
@@ -145,7 +140,7 @@
                     FeSAdsorptionEntropy*sulfurActivity
                    *Foam::exp(FeSAdsorptionHeat/(FeSGasConstant*Tc));
 
-                if (updateSigmaField)
+                if (useFeSSigma)
                 {
                     sigmaP[facei] =
                         FeSPureSigma
@@ -160,13 +155,13 @@
             }
         }
 
-        if (updateSigmaField)
+        if (useFeSSigma)
         {
             sigmaField.correctBoundaryConditions();
         }
         dSigmaDtf.correctBoundaryConditions();
     }
-    else if (useTdepSigma)
+    else if (useLinearSigma)
     {
         // Linear σ(T) clamped: constant sigma_ref for T < Tliquidus,
         // linear for Tliquidus <= T <= Tvap, constant sigma_at_Tvap for T > Tvap

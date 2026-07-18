@@ -316,10 +316,7 @@ def patch_transportProperties(path: Path, params: dict,
         (
             "sigma",
             "Marangoni_Constant",
-            "variableSurfaceTension",
             "surfaceTensionModel",
-            "variableMarangoni",
-            "MarangoniModel",
             "sulfurActivity",
         ),
     )

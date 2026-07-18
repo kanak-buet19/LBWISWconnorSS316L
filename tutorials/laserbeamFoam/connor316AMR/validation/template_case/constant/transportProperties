@@ -105,19 +105,21 @@ h_convection            0;             // Convective heat transfer coefficient [
 
 // ------------------------------------------------------------------------- //
 // Surface tension and Marangoni model
-// Fe-S is the Sahoo/DebRoy/McNallan Fe-S proxy.
-// Keep capillary sigma constant; use Fe-S only for temperature-dependent
-// Marangoni slope dSigma/dT(T).
-// sulfurActivity is used as wt% style input: 0.01 ~= 100 ppm S.
+// surfaceTensionModel: constant | linear | FeS
+//   constant - flat sigma, flat Marangoni slope (Marangoni_Constant)
+//   linear   - sigma(T) linear-clamped between sigma and sigma_at_Tvap;
+//              Marangoni slope stays Marangoni_Constant
+//   FeS      - Sahoo/DebRoy/McNallan Fe-S proxy drives sigma(T) and
+//              dSigma/dT together (coupled):
+//                sigma(T,S) = 1.943 - 4.3e-4*(T - 1809)
+//                           - R*T*1.3e-8*ln(1 + 0.00318*aS*exp(1.66e8/(R*T)))
+//              sulfurActivity is wt% style input: 0.01 ~= 100 ppm S.
 // ------------------------------------------------------------------------- //
 
 sigma                   1.87;          // Reference surface tension [N/m]
 Marangoni_Constant      -4.9e-4;       // Fallback constant dSigma/dT [N/m/K]
-variableSurfaceTension  off;           // Keep capillary sigma constant
-surfaceTensionModel     linear;        // Backwards-compatible sigma(T) model
-variableMarangoni       on;            // Use dSigma/dT(T) in Marangoni force
-MarangoniModel          FeS;           // Fe-S dSigma/dT(T)
-sulfurActivity          0.01;          // Approx. 100 ppm S
+surfaceTensionModel     FeS;      // constant | linear | FeS
+sulfurActivity          0.01;          // Approx. 100 ppm S; only used when FeS
 
 
 // ------------------------------------------------------------------------- //

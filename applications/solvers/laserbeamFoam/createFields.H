@@ -215,25 +215,48 @@ const dimensionedScalar sigma_ref
 
 const dimensionedScalar sigma_T_ref("sigma_T_ref", dimTemperature, Tliquidus1.value());
 
-const Switch useTdepSigma
-(
-    transportProperties.lookupOrDefault<Switch>("variableSurfaceTension", false)
-);
-
+// Single knob for new-format dicts: constant | linear | FeS.
+// FeS drives both sigma(T) and dSigma/dT together (coupled, no separate switch).
 const word surfaceTensionModel
 (
-    transportProperties.lookupOrDefault<word>("surfaceTensionModel", "linear")
+    transportProperties.lookupOrDefault<word>("surfaceTensionModel", "constant")
 );
 
-const Switch useTdepMarangoni
+if
+(
+    surfaceTensionModel != "constant"
+ && surfaceTensionModel != "linear"
+ && surfaceTensionModel != "FeS"
+)
+{
+    FatalErrorInFunction
+        << "Unknown surfaceTensionModel '" << surfaceTensionModel << "'; "
+        << "expected constant, linear or FeS" << exit(FatalError);
+}
+
+// Legacy support: pre-existing dicts gated surfaceTensionModel behind
+// variableSurfaceTension, and could drive an FeS Marangoni slope independently
+// of the sigma(T) model via variableMarangoni/MarangoniModel. New-format dicts
+// omit these, so the defaults below make them no-ops and surfaceTensionModel
+// alone decides everything.
+const Switch legacySurfaceTensionGate
+(
+    transportProperties.lookupOrDefault<Switch>("variableSurfaceTension", true)
+);
+const Switch legacyMarangoniGate
 (
     transportProperties.lookupOrDefault<Switch>("variableMarangoni", false)
 );
-
-const word MarangoniModel
+const word legacyMarangoniModel
 (
     transportProperties.lookupOrDefault<word>("MarangoniModel", "constant")
 );
+
+const bool useTdepSigma = legacySurfaceTensionGate && (surfaceTensionModel != "constant");
+const bool useFeSSigma = useTdepSigma && (surfaceTensionModel == "FeS");
+const bool useLinearSigma = useTdepSigma && (surfaceTensionModel == "linear");
+const bool useFeSMarangoni =
+    useFeSSigma || (legacyMarangoniGate && legacyMarangoniModel == "FeS");
 
 const scalar sulfurActivity
 (
