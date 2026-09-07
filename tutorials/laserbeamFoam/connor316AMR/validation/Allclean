@@ -16,7 +16,7 @@ clean_dir()
 }
 
 if [ "$#" -gt 0 ] && [ "$1" = "--all" ]; then
-    for caseDir in cases/*; do
+    for caseDir in runs/*; do
         [ -d "$caseDir" ] || continue
         clean_dir "$caseDir"
     done
@@ -25,10 +25,10 @@ if [ "$#" -gt 0 ] && [ "$1" = "--all" ]; then
     exit 0
 fi
 
-mapfile -t existing < <(find cases -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | sort)
+mapfile -t existing < <(find runs -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | sort)
 
 if [ "${#existing[@]}" -eq 0 ]; then
-    echo "No run folders under cases/."
+    echo "No run folders under runs/."
     exit 0
 fi
 
@@ -38,7 +38,7 @@ caseLabel()
     # Batch folders (case_NNN_<date>_<time>/) hold real case-named subfolders;
     # show those so you know what's actually inside before deleting.
     if [[ "$name" =~ ^case_[0-9]{3}_ ]]; then
-        find "cases/${name}" -mindepth 1 -maxdepth 1 -type d -printf '%f, ' 2>/dev/null | sed 's/, $//'
+        find "runs/${name}" -mindepth 1 -maxdepth 1 -type d -printf '%f, ' 2>/dev/null | sed 's/, $//'
     fi
 }
 
@@ -66,11 +66,11 @@ fi
 for item in $choice; do
     if [ "$item" = "0" ] || [ "$item" = "all" ]; then
         for name in "${existing[@]}"; do
-            clean_dir "cases/${name}"
+            clean_dir "runs/${name}"
         done
         break
     elif [[ "$item" =~ ^[0-9]+$ ]] && [ "$item" -ge 1 ] && [ "$item" -le "${#existing[@]}" ]; then
-        clean_dir "cases/${existing[$((item - 1))]}"
+        clean_dir "runs/${existing[$((item - 1))]}"
     else
         echo "Invalid choice: $item" >&2
         exit 2
