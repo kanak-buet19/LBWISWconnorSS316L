@@ -1,0 +1,22 @@
+{
+  "name": "hofmann_scantrack_200W_900mms_r25um",
+  "material": "SS316L",
+  "enabled": true,
+  "power_W": 200,
+  "scan_speed_mm_s": 900,
+  "laser_radius_m": 2.5e-05,
+  "base_mesh_size_um": 10,
+  "amr_levels": 1,
+  "electric_resistivity_values": [
+    1.0381577e-06
+  ],
+  "laser_start_z_m": 0.0001,
+  "laser_end_z_m": 0.0014,
+  "laser_off_time_s": 0.0014444444444444444,
+  "end_time_s": 0.0019444444444444446,
+  "target_width_um": 114.6025,
+  "target_depth_um": 93.9525,
+  "_electric_resistivity_value": 1.0381577e-06,
+  "electric_resistivity_value": 1.0381577e-06,
+  "write_interval_s": 1e-05
+}

@@ -1,0 +1,6 @@
+ranks=8
+cpuset=0,2,4,6,8,10,12,14
+decompose_s=2.27
+solve_wall_s=121.04
+timesteps=84
+budget_s=120

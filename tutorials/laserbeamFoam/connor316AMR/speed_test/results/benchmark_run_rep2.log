@@ -1,0 +1,25 @@
+==================================================================
+ laserbeamFoam strong-scaling benchmark
+==================================================================
+ host           : EN4226751L
+ CPU            : Intel(R) Xeon(R) w5-2445
+ physical cores : 10   logical CPUs: 20
+ case           : /home/rakibul/work/research/LBWISWconnorSS316L/tutorials/laserbeamFoam/connor316AMR/speed_test/case
+ base mesh      : nCells: 275400
+ rank counts    : 8 10 12 16 20
+ budget per run : 120 s   (warm-up 0 s)
+ started        : 2026-09-07T10:07:40-07:00
+------------------------------------------------------------------
+ load before:  10:07:40 up 37 days, 21:43,  5 users,  load average: 6.67, 11.23, 7.97
+[measured runs]
+ -- repeat 2 --
+  np=8   decompose=  2.21s  solve= 121.04s  timesteps=86
+  np=10  decompose=  2.27s  solve= 121.04s  timesteps=86
+  np=12  decompose=  2.27s  solve= 121.05s  timesteps=90
+  np=16  decompose=  2.33s  solve= 121.06s  timesteps=79
+  np=20  decompose=  2.34s  solve= 121.05s  timesteps=74
+------------------------------------------------------------------
+ finished: 2026-09-07T10:18:07-07:00
+ raw logs: /home/rakibul/work/research/LBWISWconnorSS316L/tutorials/laserbeamFoam/connor316AMR/speed_test/results/raw
+ next    : python3 scripts/analyze_speedtest.py
+==================================================================

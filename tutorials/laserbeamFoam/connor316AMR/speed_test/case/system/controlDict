@@ -1,0 +1,80 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  2412                                  |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+FoamFile
+{
+    version         2;
+    format          ascii;
+    class           dictionary;
+    location        "system";
+    object          controlDict;
+}
+
+application     laserbeamFoam;
+
+startFrom       latestTime;
+
+startTime       0;
+
+stopAt          endTime;
+
+endTime         0.00194;
+
+deltaT          1e-07;
+
+writeControl    timeStep;
+
+writeInterval   1000000;
+
+purgeWrite      0;
+
+writeFormat     ascii;
+
+writePrecision  10;
+
+writeCompression uncompressed;
+
+timeFormat      general;
+
+timePrecision   10;
+
+runTimeModifiable no;
+
+adjustTimeStep  yes;
+
+maxCo           0.1;
+
+maxAlphaCo      0.1;
+
+maxDeltaT       1e-06;
+
+debugNumerics   false;
+
+debugNumericsInterval 25;
+
+debugNumericsSmallDeltaT 5e-08;
+
+debugNumericsSmallDeltaTInterval 5;
+
+debugNumericsCoFraction 0.95;
+
+functions
+{
+    fieldStats
+    {
+        type            fieldMinMax;
+        libs            ( fieldFunctionObjects );
+        fields          ( T pVap );
+        location        no;
+        writeToFile     no;
+        log             yes;
+    }
+}
+
+
+// ************************************************************************* //

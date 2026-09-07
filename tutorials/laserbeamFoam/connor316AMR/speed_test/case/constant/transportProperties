@@ -1,0 +1,160 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+| =========                 |                                                 |
+| \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
+|  \\    /   O peration     | Version:  v2506                                 |
+|   \\  /    A nd           | Website:  www.openfoam.com                      |
+|    \\/     M anipulation  |                                                 |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    object      transportProperties;
+}
+// ************************************************************************* //
+
+// Interface tracking method: isoAdvector or MULES
+interfaceTrackingScheme MULES;
+
+phases          (metal gas);
+
+
+// ------------------------------------------------------------------------- //
+// Metal: SS316 / SS316L
+// Calibrated Hofmann short-track baseline, candidate id 8.
+// Solid kappa table scaled by 0.949816047538945; liquid scale kept at 1.0.
+// Solid cp table scaled by 1.1802857225639665; liquid scale kept at 1.0.
+// Density is kept at the liquid value used by the current solver setup.
+// ------------------------------------------------------------------------- //
+
+metal
+{
+    transportModel      Newtonian;
+
+    rho                 6881;          // Density [kg/m3]
+    nu                  1.16262171e-6; // Kinematic viscosity [m2/s] = 8e-3 Pa.s / rho
+
+    Tsolidus            1658;          // Solidus temperature [K]
+    Tliquidus           1723;          // Liquidus temperature [K]
+    LatentHeat          260e3;         // Latent heat of fusion [J/kg]
+    beta                1.8e-5;        // Thermal expansion coefficient [1/K]
+
+    table_kappa
+    (
+        (300      13.9433)
+        (500      16.716762)
+        (800      20.876957)
+        (1200     26.423882)
+        (1500     30.584077)
+        (1658     32.775112)
+        (1722.999 35.455758)
+        (1723     26.9)
+        (5000     26.9)
+        (10000    26.9)
+    );
+
+    table_cp
+    (
+        (300      581.6448)
+        (500      638.29852)
+        (800      723.27909)
+        (1200     836.58652)
+        (1500     921.56709)
+        (1658     966.32353)
+        (1722.999 834.32207)
+        (1723     790.0)
+        (5000     790.0)
+        (10000    790.0)
+    );
+
+    elec_resistivity    1.03816e-06;  // Electrical resistivity [ohm m]
+}
+
+
+// ------------------------------------------------------------------------- //
+// Gas: shielding atmosphere
+// ------------------------------------------------------------------------- //
+
+gas
+{
+    transportModel      Newtonian;
+
+    rho                 1;             // Density [kg/m3]
+    nu                  1.40e-05;      // Kinematic viscosity [m2/s]
+
+    poly_kappa          (0.018 0 0 0 0 0 0 0); // Thermal conductivity [W/m/K]
+    poly_cp             (520 0.0 0 0 0 0 0 0);   // Specific heat [J/kg/K]
+
+    Tsolidus            1.0;           // Dummy solidus temperature [K]
+    Tliquidus           10.0;          // Dummy liquidus temperature [K]
+    LatentHeat          1;             // Dummy latent heat [J/kg]
+    beta                4.0e-5;        // Thermal expansion coefficient [1/K]
+}
+
+
+// ------------------------------------------------------------------------- //
+// Radiation and convection
+// ------------------------------------------------------------------------- //
+
+emS                     0.3;           // Solid emissivity [-]
+emL                     0.3;           // Liquid emissivity [-]
+TRef                    300;           // Radiation reference temperature [K]
+T_ambient               300;           // Ambient temperature [K]
+h_convection            0;             // Convective heat transfer coefficient [W/m2/K]
+
+
+// ------------------------------------------------------------------------- //
+// Surface tension and Marangoni model
+// Fe-S is the Sahoo/DebRoy/McNallan Fe-S proxy:
+//   sigma(T,S) = 1.943 - 4.3e-4*(T - 1809)
+//              - R*T*1.3e-8*ln(1 + 0.00318*aS*exp(1.66e8/(R*T)))
+// Keep capillary sigma constant; use Fe-S only for temperature-dependent
+// Marangoni slope dSigma/dT(T).
+// sulfurActivity is used as wt% style input: 0.01 ~= 100 ppm S.
+// ------------------------------------------------------------------------- //
+
+sigma                   1.87;          // Reference surface tension [N/m]
+Marangoni_Constant      -4.9e-4;       // Fallback constant dSigma/dT [N/m/K]
+variableSurfaceTension  off;           // Keep capillary sigma constant
+surfaceTensionModel     linear;        // Backwards-compatible sigma(T) model
+variableMarangoni       off;           // Use dSigma/dT(T) in Marangoni force
+MarangoniModel          FeS;           // Fe-S dSigma/dT(T)
+sulfurActivity          0.01;          // Approx. 100 ppm S
+
+
+// ------------------------------------------------------------------------- //
+// Recoil pressure and evaporation
+// ------------------------------------------------------------------------- //
+
+p0                      101325.0;      // Atmospheric pressure reference [Pa]
+p_amb                   101325.0;      // Ambient pressure [Pa]
+recoil_coeff            0.54;          // Clausius-Clapeyron prefactor [-]
+Tvap                    3122;          // Vaporization temperature at p_amb [K]
+Tvap_atm                3122;          // Vaporization temperature at p0 [K]
+recoilPressureModel     condensation;  // condensation or modifiedReducedPressure
+recoilTransitionWidth   10;            // Smooth recoil activation width [K]
+Mm                      0.056;         // Molar mass [kg/mol]
+LatentHeatVap           6.336e6;       // Latent heat of vaporization [J/kg]
+LeeCoeff                0;             // Lee volumetric evaporation coefficient [1/s]
+
+
+// ------------------------------------------------------------------------- //
+// Scan direction
+// ------------------------------------------------------------------------- //
+
+V_scan          0.9;            // Scan speed (900 mm/s)
+scanDirection           (0 0 1);       // Scanning along +Z
+
+
+// ------------------------------------------------------------------------- //
+// Vapor plume Beer-Lambert attenuation
+// ------------------------------------------------------------------------- //
+
+vaporPlumeAttenuation   true;
+muAlphaMax              310;           // [1/m]
+pVaporMax               1e-7;          // [Pa m3]
+H_plume                 1e-3;          // [m]
+uMax                    1.5;           // [m/s]
+
+// ************************************************************************* //
