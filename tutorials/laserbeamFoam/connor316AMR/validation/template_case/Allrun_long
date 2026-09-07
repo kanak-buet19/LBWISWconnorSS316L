@@ -11,7 +11,7 @@ set -o pipefail
 bParallel=true # Only set to false for debugging purposes.
 convertVTK=true # Convert written times to legacy VTK during the solver run.
 analyzeMeltpool=true # Analyze each newly converted legacy VTK during the solver run.
-pythonExe="${PYTHON:-/home/kanak/.venv/venv314/bin/python}"
+pythonExe="${PYTHON:-$(command -v python3)}"
 
 latestInternalVTK()
 {
@@ -166,12 +166,12 @@ if ${bParallel}; then
 
     echo "[DEBUG] Starting laserbeamFoam in parallel on $nCores cores..."
     if ${convertVTK}; then
-        mpirun --oversubscribe -np $nCores \
+        mpirun -np $nCores \
             laserbeamFoam \
             -parallel \
             2>&1 | convertOnWrite | "$pythonExe" scripts/parse_simulation_log.py ${appendFlag} || { echo "[ERROR] Parallel simulation failed! Exiting."; exit 1; }
     else
-        mpirun --oversubscribe -np $nCores \
+        mpirun -np $nCores \
             laserbeamFoam \
             -parallel \
             2>&1 | "$pythonExe" scripts/parse_simulation_log.py ${appendFlag} || { echo "[ERROR] Parallel simulation failed! Exiting."; exit 1; }
