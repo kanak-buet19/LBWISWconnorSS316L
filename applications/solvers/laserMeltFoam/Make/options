@@ -42,4 +42,5 @@ EXE_LIBS = \
     -ltwoPhaseProperties \
     -lVoFphaseTurbulentTransportModels \
     -lincompressibleInterPhaseTransportModels \
-    -llagrangian
+    -llagrangian \
+    -L$(FOAM_LIBBIN)/$(FOAM_MPI) -lPstream
