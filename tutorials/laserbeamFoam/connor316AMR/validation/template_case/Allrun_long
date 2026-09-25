@@ -45,6 +45,7 @@ postProcessWrittenTime()
             scripts/analyze_meltpool_vtu.py \
             --vtk-file "$vtkFile" \
             --surface-y-um 128 \
+            </dev/null \
             || { echo "[WARNING] Meltpool analysis failed for ${vtkFile}; solver will continue." >&4; return 0; }
         echo "[DEBUG] Meltpool analysis completed successfully for ${vtkFile}."
     fi

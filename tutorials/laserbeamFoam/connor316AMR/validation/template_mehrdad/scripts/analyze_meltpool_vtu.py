@@ -1967,7 +1967,15 @@ def main() -> None:
 
     exp_ts_path = args.exp_timeseries_csv
     if exp_ts_path is None and "exp_timeseries_csv" in case_info:
-        exp_ts_path = case.parents[1] / case_info["exp_timeseries_csv"]
+        validation_root = next(
+            (
+                parent
+                for parent in (case, *case.parents)
+                if (parent / "cases.json").is_file()
+            ),
+            case,
+        )
+        exp_ts_path = validation_root / case_info["exp_timeseries_csv"]
 
     exp_timeseries_df = None
     if exp_ts_path is not None:

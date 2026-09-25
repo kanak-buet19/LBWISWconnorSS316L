@@ -527,11 +527,6 @@ def configure_case(case_dir: Path, case: dict) -> None:
             case_dir / "scripts" / script_name,
         )
     replace_regex(
-        case_dir / "scripts" / "parse_simulation_log.py",
-        r"^    v_scan = [-+0-9.]+$",
-        f"    v_scan = {float(speed):.1f}",
-    )
-    replace_regex(
         case_dir / "scripts" / "analyze_meltpool_vtu.py",
         r'^EXP_SUMMARY_CSV = Path\(__file__\)\.resolve\(\)\.parents\[1\] / ".*"$',
         f'EXP_SUMMARY_CSV = Path(__file__).resolve().parents[1] / "{summary_name}"',

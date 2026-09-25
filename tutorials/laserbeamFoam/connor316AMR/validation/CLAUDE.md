@@ -71,7 +71,7 @@ python3 template_case/scripts/analyze_meltpool_vtu.py \
 | `domain_depth_m` | no | Override Y (substrate) extent, else auto from `target_depth_um × 1.5` |
 | `electric_resistivity_values` | no | Single value or list → generates sweep sub-cases named `<name>_rho<value>` |
 | `exp_tag` | no | Prefix for `exp_<tag>_<power>W_<speed>_summary.csv` lookup |
-| `exp_timeseries_csv` | no | Path (relative to `validation/`) to `(t_ms, keyhole_depth_um)` CSV for timeseries plot |
+| `exp_timeseries_csv` | no | Path (relative to `validation/`) to `(t_ms, keyhole_depth_um)` CSV for the plot and live depth-error comparison |
 | `write_interval_s` | no | Per-case override |
 | `template` | no | Per-case template dir override |
 

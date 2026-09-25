@@ -5,11 +5,9 @@ import argparse
 import csv
 import json
 import math
+from bisect import bisect_left
 from pathlib import Path
 from tqdm import tqdm
-
-EXP_WIDTH_DEFAULT = 114.602
-EXP_DEPTH_DEFAULT = 93.953
 
 def parse_control_dict(case_dir: Path) -> float:
     end_time = 1.08e-3
@@ -22,110 +20,101 @@ def parse_control_dict(case_dir: Path) -> float:
             end_time = float(match.group(1))
     return end_time
 
-def get_sim_parameters(case_dir: Path) -> tuple[float, float, float, float]:
-    p_laser = 200.0
-    v_scan = 900.0
-    d_laser = 0.05
-    t_powder = 0.0
+def load_case_info(case_dir: Path) -> dict:
+    case_info = case_dir / "case_info.json"
+    if not case_info.exists():
+        return {}
+    try:
+        with open(case_info, "r") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
 
-    # 1. Parse Laser Power from constant/timeVsLaserPower
-    power_file = case_dir / "constant" / "timeVsLaserPower"
-    if power_file.exists():
-        with open(power_file, "r") as f:
-            content = f.read()
-        match = re.search(r"\(0\s+(\d+(?:\.\d+)?)\)", content)
-        if match:
-            p_laser = float(match.group(1))
 
-    # 2. Parse Laser Radius from constant/LaserProperties
-    laser_properties_file = case_dir / "constant" / "LaserProperties"
-    if laser_properties_file.exists():
-        with open(laser_properties_file, "r") as f:
-            content = f.read()
-        match_radius = re.search(r"laserRadius\s+(\d+(?:\.\d+)?(?:e-?\d+)?);", content)
-        if match_radius:
-            radius = float(match_radius.group(1))
-            d_laser = round(2.0 * radius * 1000.0, 3) # in mm
-        match_powder = re.search(r"PowderSim\s+(true|false);", content)
-        if match_powder:
-            if match_powder.group(1) == "false":
-                t_powder = 0.0
+def resolve_validation_path(case_dir: Path, configured_path: str) -> Path:
+    path = Path(configured_path)
+    if path.is_absolute():
+        return path
+    for parent in (case_dir, *case_dir.parents):
+        if (parent / "cases.json").is_file():
+            return parent / path
+    return case_dir / path
 
-    # 3. Parse Scan Speed from constant/timeVsLaserPosition
-    pos_file = case_dir / "constant" / "timeVsLaserPosition"
-    if pos_file.exists():
-        with open(pos_file, "r") as f:
-            content = f.read()
-        matches = re.findall(r"\(([\d\.e\-]+)\s+\(([\d\.e\-]+)\s+([\d\.e\-]+)\s+([\d\.e\-]+)\)\)", content)
-        if len(matches) >= 2:
-            t0, x0, y0, z0 = map(float, matches[0])
-            t1, x1, y1, z1 = map(float, matches[-1])
-            dt = t1 - t0
-            dz = abs(z1 - z0)
-            if dt > 0:
-                v_scan = round((dz * 1000.0) / dt, 1) # in mm/s
 
-    return p_laser, v_scan, d_laser, t_powder
+def optional_float(row: dict, key: str) -> float | None:
+    try:
+        value = float(row[key])
+        return value if math.isfinite(value) and value > 0.0 else None
+    except (KeyError, TypeError, ValueError):
+        return None
 
-def get_experimental_metrics(case_dir: Path) -> tuple[float, float]:
-    summary_files = sorted(case_dir.glob("exp_hofmann_*_summary.csv"))
+
+def get_experimental_metrics(case_dir: Path, case_info: dict) -> tuple[float | None, float | None]:
+    summary_files = sorted(case_dir.glob("exp_*_summary.csv"))
     for exp_csv in summary_files:
         try:
             with open(exp_csv, mode="r", newline="") as f:
                 row = next(csv.DictReader(f), None)
             if row:
-                return float(row["width_um"]), float(row["depth_um"])
-        except (KeyError, TypeError, ValueError, OSError):
+                width = optional_float(row, "width_um")
+                depth = optional_float(row, "depth_um")
+                if width is not None or depth is not None:
+                    return width, depth
+        except OSError:
             pass
 
-    case_info = case_dir / "case_info.json"
-    if case_info.exists():
-        try:
-            with open(case_info, "r") as f:
-                info = json.load(f)
-            return float(info["target_width_um"]), float(info["target_depth_um"])
-        except (KeyError, TypeError, ValueError, OSError, json.JSONDecodeError):
-            pass
+    return (
+        optional_float(case_info, "target_width_um"),
+        optional_float(case_info, "target_depth_um"),
+    )
 
-    exp_csv = Path("/home/kanak/drives/d-drive/work/research/connor_project/papers/2026_Hofmann_Meltpool_data_316L/MeltpoolGeometryData.csv")
-    if not exp_csv.exists():
-        return EXP_WIDTH_DEFAULT, EXP_DEPTH_DEFAULT
 
+def get_experimental_depth_timeseries(case_dir: Path, case_info: dict) -> list[tuple[float, float]]:
+    configured_path = case_info.get("exp_timeseries_csv")
+    if not configured_path:
+        return []
+    exp_csv = resolve_validation_path(case_dir, configured_path)
     try:
-        p_laser, v_scan, d_laser, t_powder = get_sim_parameters(case_dir)
-        with open(exp_csv, mode='r') as f:
-            reader = csv.reader(f)
-            header = next(reader)
-            rows = list(reader)
+        with open(exp_csv, mode="r", newline="") as f:
+            rows = list(csv.DictReader(f))
+    except OSError:
+        return []
 
-        matching_widths = []
-        matching_depths = []
-        tol = 1e-4
-        for r in rows:
-            if len(r) < 7:
-                continue
-            try:
-                p_val = float(r[1])
-                v_val = float(r[2])
-                d_val = float(r[3])
-                t_val = float(r[4])
-                
-                if (abs(p_val - p_laser) < tol and
-                    abs(v_val - v_scan) < tol and
-                    abs(d_val - d_laser) < tol and
-                    abs(t_val - t_powder) < tol):
-                    matching_widths.append(float(r[5]))
-                    matching_depths.append(float(r[6]))
-            except ValueError:
-                continue
+    if rows and {"t_ms", "keyhole_depth_um"}.issubset(rows[0]):
+        time_key, depth_key = "t_ms", "keyhole_depth_um"
+    elif rows and {"time_ms", "depth_mean"}.issubset(rows[0]):
+        time_key, depth_key = "time_ms", "depth_mean"
+    elif rows and {"time_ms", "depth_um"}.issubset(rows[0]):
+        time_key, depth_key = "time_ms", "depth_um"
+    else:
+        return []
 
-        if matching_widths:
-            avg_width = sum(matching_widths) / len(matching_widths)
-            avg_depth = sum(matching_depths) / len(matching_depths)
-            return avg_width, avg_depth
-    except Exception:
-        pass
-    return EXP_WIDTH_DEFAULT, EXP_DEPTH_DEFAULT
+    samples = []
+    for row in rows:
+        try:
+            time_ms = float(row[time_key])
+            depth_um = float(row[depth_key])
+            if math.isfinite(time_ms) and time_ms >= 0.0 and depth_um > 0.0:
+                samples.append((time_ms, depth_um))
+        except (KeyError, TypeError, ValueError):
+            pass
+    return sorted(samples)
+
+
+def interpolated_depth(samples: list[tuple[float, float]], time_ms: float) -> float | None:
+    if not samples or time_ms < samples[0][0] or time_ms > samples[-1][0]:
+        return None
+    index = bisect_left(samples, (time_ms, -math.inf))
+    if index == 0:
+        return samples[0][1]
+    if index == len(samples):
+        return samples[-1][1]
+    t0, depth0 = samples[index - 1]
+    t1, depth1 = samples[index]
+    if t1 == t0:
+        return depth1
+    fraction = (time_ms - t0) / (t1 - t0)
+    return depth0 + fraction * (depth1 - depth0)
 
 def get_latest_absorptivity(case_dir: Path) -> float:
     csv_file = case_dir / "absorptivity_vs_time" / "absorptivity_vs_time.csv"
@@ -148,32 +137,25 @@ def get_latest_absorptivity(case_dir: Path) -> float:
         pass
     return 0.0
 
-def get_latest_meltpool_geometry(case_dir: Path) -> tuple[float, float, float]:
+def get_latest_meltpool_geometry(case_dir: Path, depth_metric: str) -> tuple[float, float, float]:
     csv_file = case_dir / "post-processing-data" / "vtk_meltpool_geometry.csv"
     if not csv_file.exists():
         return 0.0, 0.0, 0.0
     try:
         with open(csv_file, "r") as f:
-            lines = f.readlines()
-            if len(lines) > 1:
-                # Find the last line that has valid numbers
-                for last_line in reversed(lines):
-                    last_line = last_line.strip()
-                    if not last_line:
-                        continue
-                    parts = last_line.split(",")
-                    if len(parts) >= 14:
-                        try:
-                            t_val = float(parts[0])
-                            depth = float(parts[7])
-                            width = float(parts[13])
-                            
-                            if not math.isnan(t_val) and (not math.isnan(depth) or not math.isnan(width)):
-                                w_val = 0.0 if math.isnan(width) else width
-                                d_val = 0.0 if math.isnan(depth) else depth
-                                return t_val, w_val, d_val
-                        except ValueError:
-                            pass
+            rows = list(csv.DictReader(f))
+            depth_field = "keyholeDepth_um" if depth_metric == "keyhole" else "meltPoolDepth_um"
+            for row in reversed(rows):
+                try:
+                    t_val = float(row["time"])
+                    depth = float(row[depth_field])
+                    width = float(row["meltPoolWidth_um"])
+                    if not math.isnan(t_val) and (not math.isnan(depth) or not math.isnan(width)):
+                        w_val = 0.0 if math.isnan(width) else width
+                        d_val = 0.0 if math.isnan(depth) else depth
+                        return t_val, w_val, d_val
+                except (KeyError, TypeError, ValueError):
+                    pass
     except Exception:
         pass
     return 0.0, 0.0, 0.0
@@ -186,8 +168,10 @@ def main():
     case_dir = Path(__file__).resolve().parents[1]
     end_time = parse_control_dict(case_dir)
     
-    # Load experimental metrics
-    exp_width, exp_depth = get_experimental_metrics(case_dir)
+    case_info = load_case_info(case_dir)
+    exp_width, exp_depth = get_experimental_metrics(case_dir, case_info)
+    exp_depth_timeseries = get_experimental_depth_timeseries(case_dir, case_info)
+    depth_metric = case_info.get("depth_metric", "meltpool")
     
     log_file_path = case_dir / "log.laserbeamFoam"
     mode = "a" if args.append else "w"
@@ -254,17 +238,23 @@ def main():
                     abs_val = get_latest_absorptivity(case_dir)
 
                     # Check for new melt pool geometry predictions
-                    mp_time, mp_width, mp_depth = get_latest_meltpool_geometry(case_dir)
+                    mp_time, mp_width, mp_depth = get_latest_meltpool_geometry(case_dir, depth_metric)
                     if mp_time > 0.0 and mp_time > last_printed_mp_time:
-                        # Calculate relative errors compared to experimental values
-                        width_err = ((mp_width - exp_width) / exp_width) * 100.0 if mp_width > 0.0 else float('nan')
-                        depth_err = ((mp_depth - exp_depth) / exp_depth) * 100.0 if mp_depth > 0.0 else float('nan')
-                        
-                        # Format errors beautifully
-                        width_err_str = f"{width_err:+.1f}%" if not math.isnan(width_err) else "N/A"
-                        depth_err_str = f"{depth_err:+.1f}%" if not math.isnan(depth_err) else "N/A"
-                        
-                        pbar.write(f"[ANALYSIS] Time: {mp_time*1e3:.3f} ms | Width Err: {width_err_str} | Depth Err: {depth_err_str}")
+                        comparisons = []
+                        if exp_width is not None and mp_width > 0.0:
+                            width_err = ((mp_width - exp_width) / exp_width) * 100.0
+                            comparisons.append(f"Width Err: {width_err:+.1f}%")
+                        depth_target = interpolated_depth(exp_depth_timeseries, mp_time * 1e3)
+                        if depth_target is None:
+                            depth_target = exp_depth
+                        if depth_target is not None and mp_depth > 0.0:
+                            depth_err = ((mp_depth - depth_target) / depth_target) * 100.0
+                            comparisons.append(f"Depth Err: {depth_err:+.1f}%")
+                        if comparisons:
+                            pbar.write(
+                                f"[ANALYSIS] Time: {mp_time*1e3:.3f} ms | "
+                                + " | ".join(comparisons)
+                            )
                         last_printed_mp_time = mp_time
                 except (ValueError, IndexError):
                     pass
